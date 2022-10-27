@@ -4,3 +4,5 @@ out/
 build
 dist
 magick_tile.egg-info
+__pycache__
+.pytest_cache
