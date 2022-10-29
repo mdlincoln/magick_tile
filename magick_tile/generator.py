@@ -87,12 +87,12 @@ class Tile(BaseModel):
     def resize(self) -> None:
         """Call imagemagick to convert the cropped fullsized tiles to their scaled-down versions, writing it to the final target folder specified by the user."""
         self.target_dir.mkdir(parents=True)
-        cmd = [
+        cmd: list[str] = [
             "convert",
-            self.original_path,
+            self.original_path.name,
             "-resize",
             f"{self.file_w}x{self.file_h}",
-            self.target_file,
+            self.target_file.name,
         ]
         subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
 
