@@ -31,7 +31,8 @@ class Tile(BaseModel):
     original_path: Path
     source_image: "SourceImage"
 
-    @cached_property
+    # @cached_property
+    @property
     def parsed_filename(self) -> list[int]:
         return [int(i) for i in self.original_path.stem.split(".")[0].split(",")]
 
@@ -108,7 +109,8 @@ class SourceImage(BaseModel):
     tiles: list[Tile] = []
     working_dir: Path = Field(default_factory=tempdir_path)
 
-    @cached_property
+    # @cached_property
+    @property
     def dimensions(self) -> Dimensions:
         """
         Get the dimensions of the image according to imagemagick
@@ -120,7 +122,7 @@ class SourceImage(BaseModel):
         dims = re.search(r"(\d+)x(\d+)", identify_stdout)
         if dims is not None:
             groups = dims.groups()
-            return Dimensions(height=int(groups[0]), width=int(groups[1]))
+            return Dimensions(width=int(groups[0]), height=int(groups[1]))
         else:
             raise Exception(
                 f"imagemagick's identify did not return the expected format for {self.path}. Output: '{identify_stdout}'"
@@ -194,7 +196,8 @@ class SourceImage(BaseModel):
                 stdout=subprocess.PIPE,
             )
 
-    @cached_property
+    # @cached_property
+    @property
     def manifest(self) -> IIIFManifest:
         """Return manifest"""
         return IIIFManifest(
@@ -235,3 +238,6 @@ class SourceImage(BaseModel):
         4. Write the IIIF image information JSON file
         """
         self.write_info()
+
+
+Tile.update_forward_refs()

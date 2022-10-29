@@ -14,5 +14,5 @@ def is_magick_installed() -> bool:
 
 if not is_magick_installed():
     raise Exception(
-        "ImageMagick does not appear to be installed or available on your $PATH"
+        "ImageMagick's 'convert' does not appear to be installed or available on your $PATH"
     )
