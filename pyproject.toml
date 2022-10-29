@@ -20,3 +20,6 @@ pytest-subprocess = "^1.4.2"
 [build-system]
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
+
+[tool.mypy]
+plugins = "pydantic.mypy"
