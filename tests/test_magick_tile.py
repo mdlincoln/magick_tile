@@ -46,9 +46,15 @@ def test_output_dir():
         yield Path(tmpdir)
 
 
+@pytest.fixture
+def test_working_dir():
+    with TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
 @pytest.fixture()
 def test_image() -> Path:
-    return Path(__file__).parent.joinpath("complete-usable-accurate.png")
+    return Path(__file__).parent / "complete-usable-accurate.png"
 
 
 @pytest.fixture
@@ -71,8 +77,10 @@ class TestImagemagick:
 
 
 @pytest.fixture
-def example_source_image(test_output_dir: Path, test_image: Path) -> SourceImage:
-    return SourceImage(id="https://example.com/test.jpg", path=test_image, tile_size=64, target_dir=test_output_dir)  # type: ignore
+def example_source_image(
+    test_output_dir: Path, test_working_dir: Path, test_image: Path
+) -> SourceImage:
+    return SourceImage(id="https://example.com/test.jpg", path=test_image, tile_size=512, target_dir=test_output_dir, working_dir=test_working_dir)  # type: ignore
 
 
 class TestSourceImage:
@@ -87,7 +95,7 @@ class TestSourceImage:
         assert example_source_image.downsizing_levels == [256, 512, 1024, 2048]
 
     def test_scaling_factors(self, example_source_image: SourceImage):
-        assert example_source_image.scaling_factors == [2, 4, 8, 16]
+        assert example_source_image.scaling_factors == [2]
 
     def test_manifest(self, example_source_image: SourceImage):
         assert example_source_image.manifest.dict(exclude_none=True) == {
@@ -105,13 +113,13 @@ class TestSourceImage:
                 {"width": 1024, "height": "full"},
                 {"width": 2048, "height": "full"},
             ],
-            "tiles": [{"width": 64, "scaleFactors": [2, 4, 8, 16]}],
+            "tiles": [{"width": 512, "scaleFactors": [2]}],
         }
 
 
 @pytest.fixture
 def tile_image() -> Path:
-    return Path(__file__).parent.joinpath("tile_image.jpg")
+    return Path(__file__).parent / "256,2,0,0,512,512.jpg"
 
 
 @pytest.fixture()
@@ -121,4 +129,29 @@ def example_tile(example_source_image: SourceImage, tile_image: Path) -> Tile:
 
 class TestTile:
     def test_parsed_filename(self, example_tile: Tile):
-        pass
+        assert example_tile.parsed_filename == [256, 2, 0, 0, 512, 512]
+        assert example_tile.sf == 2
+        assert example_tile.x == 0
+        assert example_tile.y == 0
+        assert example_tile.w == 512
+        assert example_tile.h == 512
+
+    def test_file_w(self, example_tile: Tile):
+        assert example_tile.file_w == 256
+
+    def test_file_h(self, example_tile: Tile):
+        assert example_tile.file_h == 256
+
+    def test_target_dir(self, example_tile: Tile, test_output_dir: Path):
+        assert example_tile.target_dir == test_output_dir / "0,0,512,512" / "256," / "0"
+
+    def test_target_file(self, example_tile: Tile, test_output_dir: Path):
+        assert (
+            example_tile.target_file
+            == test_output_dir / "0,0,512,512" / "256," / "0" / "default.jpg"
+        )
+
+    def test_resize(self, example_tile: Tile):
+        target_file = example_tile.target_dir / "default.jpg"
+        example_tile.resize()
+        assert target_file.exists()

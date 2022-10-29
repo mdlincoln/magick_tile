@@ -34,7 +34,7 @@ class Tile(BaseModel):
     # @cached_property
     @property
     def parsed_filename(self) -> list[int]:
-        return [int(i) for i in self.original_path.stem.split(".")[0].split(",")]
+        return [int(i) for i in self.original_path.stem.split(",")]
 
     @property
     def sf(self) -> int:
@@ -80,21 +80,25 @@ class Tile(BaseModel):
             / f"{self.file_w},/0"
         )
 
+    @property
+    def target_file(self) -> Path:
+        return self.target_dir / "default.jpg"
+
     def resize(self) -> None:
+        """Call imagemagick to convert the cropped fullsized tiles to their scaled-down versions, writing it to the final target folder specified by the user."""
         self.target_dir.mkdir(parents=True)
-        subprocess.call(
-            [
-                "convert",
-                self.original_path,
-                "-resize",
-                f"{self.file_w}x{self.file_h}",
-                f"{self.target_dir}/default.jpg",
-            ],
-            stdout=subprocess.PIPE,
-        )
+        cmd = [
+            "convert",
+            self.original_path,
+            "-resize",
+            f"{self.file_w}x{self.file_h}",
+            self.target_file,
+        ]
+        subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
 
 
 def tempdir_path() -> Path:
+    """Method to return a temp directory Path that can be supplied for SourceImage's working_dir field default_factory"""
     return Path(mkdtemp())
 
 
@@ -154,7 +158,7 @@ class SourceImage(BaseModel):
         """Write multizised tile images"""
         for sf in track(self.scaling_factors, description="Tiling image..."):
             cropsize: int = self.tile_size * sf
-            call: list[str] = [
+            cmd: list[str] = [
                 "convert",
                 self.path.name,
                 "-monitor",
@@ -167,7 +171,7 @@ class SourceImage(BaseModel):
                 "+adjoin",
                 f"{self.working_dir.name}/{cropsize},{sf},%[filename:tile].jpg",
             ]
-            subprocess.call(call, stdout=subprocess.PIPE)
+            subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
 
             # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
             generated_paths = self.working_dir.glob("/*")
@@ -185,15 +189,17 @@ class SourceImage(BaseModel):
         for ds in self.downsizing_levels:
             target_directory = Path(self.target_dir) / "full" / f"{ds}," / "0"
             target_directory.mkdir(parents=True)
-            subprocess.call(
-                [
-                    "convert",
-                    self.path,
-                    "-geometry",
-                    f"{ds}x",
-                    f"{target_directory}/default.jpg",
-                ],
+            cmd: list[str] = [
+                "convert",
+                self.path.name,
+                "-geometry",
+                f"{ds}x",
+                f"{target_directory}/default.jpg",
+            ]
+            subprocess.run(
+                cmd,
                 stdout=subprocess.PIPE,
+                check=True,
             )
 
     # @cached_property
