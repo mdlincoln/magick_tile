@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from pytest_subprocess import FakeProcess
-from magick_tile.generator import SourceImage, Tile
+from magick_tile.generator import SourceImage, Tile, DownsizedVersion
 from magick_tile.manifest import IIIFManifest, TileScale, TileSize
 
 
@@ -119,12 +119,19 @@ class TestSourceImage:
 
 @pytest.fixture
 def tile_image() -> Path:
-    return Path(__file__).parent / "256,2,0,0,512,512.jpg"
+    p = Path(__file__).parent / "256,2,0,0,512,512.jpg"
+    print(p)
+    return p
 
 
-@pytest.fixture()
+@pytest.fixture
 def example_tile(example_source_image: SourceImage, tile_image: Path) -> Tile:
     return Tile(original_path=tile_image, source_image=example_source_image)
+
+
+@pytest.fixture
+def example_downsized_version(example_source_image: SourceImage) -> DownsizedVersion:
+    return DownsizedVersion(downsize_width=512, source_image=example_source_image)
 
 
 class TestTile:
@@ -153,5 +160,38 @@ class TestTile:
 
     def test_resize(self, example_tile: Tile):
         target_file = example_tile.target_dir / "default.jpg"
+        assert not target_file.exists()
         example_tile.resize()
         assert target_file.exists()
+
+
+class TestDownsizedVersion:
+    def test_target_directory(
+        self, example_downsized_version: DownsizedVersion, test_output_dir: Path
+    ):
+        assert (
+            example_downsized_version.target_directory
+            == test_output_dir / "full" / "512," / "0"
+        )
+        assert (
+            example_downsized_version.target_file
+            == test_output_dir / "full" / "512," / "0" / "default.jpg"
+        )
+
+    def test_convert(
+        self, example_downsized_version: DownsizedVersion, test_output_dir: Path
+    ):
+        assert not example_downsized_version.target_file.exists()
+        example_downsized_version.convert()
+        assert example_downsized_version.target_file.exists()
+
+
+class TestImageProcess:
+    def test_generate_tile_files(
+        self,
+        example_source_image: SourceImage,
+        test_working_dir: Path,
+        test_output_dir: Path,
+    ):
+        assert example_source_image.target_dir == test_output_dir
+        example_source_image.generate_tile_files()

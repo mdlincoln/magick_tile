@@ -74,7 +74,7 @@ class Tile(BaseModel):
 
     @property
     def target_dir(self) -> Path:
-        return Path(
+        return (
             self.source_image.target_dir
             / f"{self.x},{self.y},{self.w},{self.h}"
             / f"{self.file_w},/0"
@@ -87,12 +87,12 @@ class Tile(BaseModel):
     def resize(self) -> None:
         """Call imagemagick to convert the cropped fullsized tiles to their scaled-down versions, writing it to the final target folder specified by the user."""
         self.target_dir.mkdir(parents=True)
-        cmd: list[str] = [
+        cmd: list[str | Path] = [
             "convert",
-            self.original_path.name,
+            self.original_path,
             "-resize",
             f"{self.file_w}x{self.file_h}",
-            self.target_file.name,
+            self.target_file,
         ]
         subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
 
@@ -100,6 +100,34 @@ class Tile(BaseModel):
 def tempdir_path() -> Path:
     """Method to return a temp directory Path that can be supplied for SourceImage's working_dir field default_factory"""
     return Path(mkdtemp())
+
+
+class DownsizedVersion(BaseModel):
+    downsize_width: int
+    source_image: "SourceImage"
+
+    @property
+    def target_directory(self) -> Path:
+        return self.source_image.target_dir / "full" / f"{self.downsize_width}," / "0"
+
+    @property
+    def target_file(self) -> Path:
+        return self.target_directory / "default.jpg"
+
+    def convert(self) -> None:
+        self.target_directory.mkdir(parents=True)
+        cmd: list[str | Path] = [
+            "convert",
+            self.source_image.path,
+            "-geometry",
+            f"{self.downsize_width}x",
+            self.target_file,
+        ]
+        subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            check=True,
+        )
 
 
 class SourceImage(BaseModel):
@@ -158,9 +186,9 @@ class SourceImage(BaseModel):
         """Write multizised tile images"""
         for sf in track(self.scaling_factors, description="Tiling image..."):
             cropsize: int = self.tile_size * sf
-            cmd: list[str] = [
+            cmd: list[str | Path] = [
                 "convert",
-                self.path.name,
+                self.path,
                 "-monitor",
                 "-crop",
                 f"{cropsize}x{cropsize}",
@@ -169,12 +197,12 @@ class SourceImage(BaseModel):
                 "%[fx:page.x],%[fx:page.y],%[fx:w],%[fx:h]",  # rely on Imagemagick to tell us the resulting dimensions for the tiles it makes, which is especially useful on the non-square tiles from the right and bottom edges of images
                 "+repage",
                 "+adjoin",
-                f"{self.working_dir.name}/{cropsize},{sf},%[filename:tile].jpg",
+                self.working_dir / f"{cropsize},{sf},%[filename:tile].jpg",
             ]
             subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
 
             # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
-            generated_paths = self.working_dir.glob("/*")
+            generated_paths = self.working_dir.glob("*.jpg")
             for gp in generated_paths:
                 self.tiles.append(Tile(original_path=gp, source_image=self))
 
@@ -187,20 +215,7 @@ class SourceImage(BaseModel):
         Create smaller derivatives of the full image.
         """
         for ds in self.downsizing_levels:
-            target_directory = Path(self.target_dir) / "full" / f"{ds}," / "0"
-            target_directory.mkdir(parents=True)
-            cmd: list[str] = [
-                "convert",
-                self.path.name,
-                "-geometry",
-                f"{ds}x",
-                f"{target_directory}/default.jpg",
-            ]
-            subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                check=True,
-            )
+            DownsizedVersion(downsize_width=ds, source_image=self).convert()
 
     # @cached_property
     @property
@@ -247,3 +262,4 @@ class SourceImage(BaseModel):
 
 
 Tile.update_forward_refs()
+DownsizedVersion.update_forward_refs()
