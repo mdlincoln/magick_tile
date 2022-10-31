@@ -94,7 +94,7 @@ class Tile(BaseModel):
             f"{self.file_w}x{self.file_h}",
             self.target_file,
         ]
-        subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+        subprocess.run(cmd, capture_output=True, check=True)
 
 
 def tempdir_path() -> Path:
@@ -148,7 +148,7 @@ class SourceImage(BaseModel):
         Get the dimensions of the image according to imagemagick
         """
         subprocess_capture = subprocess.run(
-            ["identify", "-ping", self.path], stdout=subprocess.PIPE
+            ["identify", "-ping", self.path], capture_output=True
         )
         identify_stdout = subprocess_capture.stdout.decode("utf-8")
         dims = re.search(r"(\d+)x(\d+)", identify_stdout)
@@ -199,7 +199,7 @@ class SourceImage(BaseModel):
                 "+adjoin",
                 self.working_dir / f"{cropsize},{sf},%[filename:tile].jpg",
             ]
-            subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+            subprocess.run(cmd, capture_output=True, check=True)
 
             # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
             generated_paths = self.working_dir.glob("*.jpg")
