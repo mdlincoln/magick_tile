@@ -120,7 +120,6 @@ class TestSourceImage:
 @pytest.fixture
 def tile_image() -> Path:
     p = Path(__file__).parent / "256,2,0,0,512,512.jpg"
-    print(p)
     return p
 
 
@@ -178,9 +177,7 @@ class TestDownsizedVersion:
             == test_output_dir / "full" / "512," / "0" / "default.jpg"
         )
 
-    def test_convert(
-        self, example_downsized_version: DownsizedVersion, test_output_dir: Path
-    ):
+    def test_convert(self, example_downsized_version: DownsizedVersion):
         assert not example_downsized_version.target_file.exists()
         example_downsized_version.convert()
         assert example_downsized_version.target_file.exists()
@@ -191,7 +188,29 @@ class TestImageProcess:
         self,
         example_source_image: SourceImage,
         test_working_dir: Path,
+    ):
+        assert example_source_image.working_dir == test_working_dir
+        assert len(list(test_working_dir.glob("*"))) == 0
+        example_source_image.generate_tile_files()
+        first_image = test_working_dir / "1024,2,0,0,1024,1024.jpg"
+        assert first_image.exists()
+
+    def test_resize_tile_files(
+        self,
+        example_source_image: SourceImage,
         test_output_dir: Path,
     ):
         assert example_source_image.target_dir == test_output_dir
-        example_source_image.generate_tile_files()
+        assert len(list(test_output_dir.glob("*"))) == 0
+        example_source_image.resize_tile_files()
+        first_image = test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
+        assert first_image.exists()
+
+    def test_generate_reduced_versions(
+        self, example_source_image: SourceImage, test_output_dir: Path
+    ):
+        assert example_source_image.target_dir == test_output_dir
+        assert len(list(test_output_dir.glob("*"))) == 0
+        example_source_image.generate_reduced_versions()
+        first_image = test_output_dir / "full" / "1024," / "0" / "default.jpg"
+        assert first_image.exists()

@@ -86,7 +86,7 @@ class Tile(BaseModel):
 
     def resize(self) -> None:
         """Call imagemagick to convert the cropped fullsized tiles to their scaled-down versions, writing it to the final target folder specified by the user."""
-        self.target_dir.mkdir(parents=True)
+        self.target_dir.mkdir(parents=True, exist_ok=True)
         cmd: list[str | Path] = [
             "convert",
             self.original_path,
@@ -115,7 +115,7 @@ class DownsizedVersion(BaseModel):
         return self.target_directory / "default.jpg"
 
     def convert(self) -> None:
-        self.target_directory.mkdir(parents=True)
+        self.target_directory.mkdir(parents=True, exist_ok=True)
         cmd: list[str | Path] = [
             "convert",
             self.source_image.path,
