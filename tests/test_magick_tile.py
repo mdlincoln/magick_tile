@@ -226,3 +226,30 @@ class TestImageProcess:
         example_source_image.generate_reduced_versions()
         first_image = test_output_dir / "full" / "1024," / "0" / "default.jpg"
         assert first_image.exists()
+
+
+class TestManifestOutput:
+    def test_manifest_output(
+        self, example_source_image: SourceImage, test_output_dir: Path
+    ):
+        info_file_path = test_output_dir / "info.json"
+        assert not info_file_path.exists()
+        example_source_image.write_info()
+        assert info_file_path.exists()
+        with open(info_file_path, "r") as infof:
+            reread_obj = json.load(infof)
+            assert reread_obj["id"] == example_source_image.id
+
+
+class TestCompleteOutput:
+    def test_all_outputs(
+        self, example_source_image: SourceImage, test_output_dir: Path
+    ):
+        assert len(list(test_output_dir.glob("*"))) == 0
+        example_source_image.convert()
+        info_file_path = test_output_dir / "info.json"
+        assert info_file_path.exists()
+        assert (test_output_dir / "full" / "1024," / "0" / "default.jpg").exists()
+        assert (
+            test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
+        ).exists()
