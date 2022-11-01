@@ -1,8 +1,8 @@
-name: CI
+name: pytest
 on: pull_request
 
 jobs:
-  ci:
+  pytest:
     strategy:
       fail-fast: true
       matrix:
