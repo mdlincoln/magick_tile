@@ -11,7 +11,7 @@ jobs:
         # '1.1.15'
         poetry-version: ['1.2.2']
         # os: [ubuntu-18.04, macos-latest, windows-latest]
-        os: [macos-latest]
+        os: [ubuntu-18.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
