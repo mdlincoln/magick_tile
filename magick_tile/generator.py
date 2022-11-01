@@ -2,8 +2,8 @@
 This takes inspiration heavily from https://github.com/zimeon/iiif/blob/master/iiif_static.py
 """
 
+import logging
 from typing import Optional
-
 import re
 import subprocess
 from math import floor, ceil
@@ -94,6 +94,7 @@ class Tile(BaseModel):
             f"{self.file_w}x{self.file_h}",
             self.target_file,
         ]
+        logging.debug(f"Resize command: {cmd}")
         subprocess.run(cmd, capture_output=True, check=True)
 
 

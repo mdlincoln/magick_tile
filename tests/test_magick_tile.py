@@ -52,9 +52,25 @@ def test_working_dir():
         yield Path(tmpdir)
 
 
+@pytest.fixture
+def test_jpg() -> Path:
+    p = Path(__file__).parent.absolute() / "assets" / "complete-usable-accurate.jpg"
+    assert p.exists()
+    return p
+
+
 @pytest.fixture()
-def test_image() -> Path:
-    return Path(__file__).parent / "complete-usable-accurate.png"
+def test_png() -> Path:
+    p = Path(__file__).parent.absolute() / "assets" / "complete-usable-accurate.png"
+    assert p.exists()
+    return p
+
+
+@pytest.fixture
+def tile_jpg() -> Path:
+    p = Path(__file__).parent.absolute() / "assets" / "256,2,0,0,512,512.jpg"
+    assert p.exists()
+    return p
 
 
 @pytest.fixture
@@ -78,9 +94,9 @@ class TestImagemagick:
 
 @pytest.fixture
 def example_source_image(
-    test_output_dir: Path, test_working_dir: Path, test_image: Path
+    test_output_dir: Path, test_working_dir: Path, test_jpg: Path
 ) -> SourceImage:
-    return SourceImage(id="https://example.com/test.jpg", path=test_image, tile_size=512, target_dir=test_output_dir, working_dir=test_working_dir)  # type: ignore
+    return SourceImage(id="https://example.com/test.jpg", path=test_jpg, tile_size=512, target_dir=test_output_dir, working_dir=test_working_dir)  # type: ignore
 
 
 class TestSourceImage:
@@ -118,14 +134,8 @@ class TestSourceImage:
 
 
 @pytest.fixture
-def tile_image() -> Path:
-    p = Path(__file__).parent / "256,2,0,0,512,512.jpg"
-    return p
-
-
-@pytest.fixture
-def example_tile(example_source_image: SourceImage, tile_image: Path) -> Tile:
-    return Tile(original_path=tile_image, source_image=example_source_image)
+def example_tile(example_source_image: SourceImage, tile_jpg: Path) -> Tile:
+    return Tile(original_path=tile_jpg, source_image=example_source_image)
 
 
 @pytest.fixture
@@ -202,7 +212,9 @@ class TestImageProcess:
     ):
         assert example_source_image.target_dir == test_output_dir
         assert len(list(test_output_dir.glob("*"))) == 0
+        example_source_image.generate_tile_files()
         example_source_image.resize_tile_files()
+        assert len(list(test_output_dir.glob("*"))) > 0
         first_image = test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
         assert first_image.exists()
 
