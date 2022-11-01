@@ -26,4 +26,9 @@ jobs:
       - name: mypy
         run: poetry run mypy .
       - name: Pytest
-        run: poetry run pytest
+        run: poetry run pytest --junitxml=pytest.xml --cov=image_magick --cov-report=term-missing:skip-covered | tee pytest-coverage.txt
+      - name: Pytest coverage comment
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          pytest-coverage-path: ./pytest-coverage.txt
+          junitxml-path: ./pytest.xml
