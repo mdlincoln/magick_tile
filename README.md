@@ -1,7 +1,7 @@
 # magick-tile
 
 [![PyPi version](https://img.shields.io/pypi/v/magick-tile.svg)](https://pypi.org/project/magick-tile/)
-[![CI](https://github.com/mdlincoln/magick_tile/actions/workflows/ci.yml/badge.svg)](https://github.com/mdlincoln/magick_tile/actions/workflows/ci.yml)
+[![pytest](https://github.com/mdlincoln/magick_tile/actions/workflows/pytest.yml/badge.svg)](https://github.com/mdlincoln/magick_tile/actions/workflows/pytest.yml)
 
 This package and command-line utility relies on Imagemagick to efficiently create derivative tiles of a very large image, and structure them into directories compliant with [IIIF Level 0](https://iiif.io/api/image/3.0/compliance/#5-level-0-compliance) specification for static sites.
 
