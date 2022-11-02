@@ -36,7 +36,7 @@ def convert(
     ),
 ):
     """
-    IIIF Image API Level-0 static file generator.
+    Efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0.
     """
 
     si = generator.SourceImage(
