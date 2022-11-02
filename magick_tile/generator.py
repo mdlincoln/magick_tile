@@ -11,7 +11,6 @@ from tempfile import mkdtemp
 from pathlib import Path
 from itertools import product
 
-from functools import cached_property
 from pydantic import BaseModel, Field, HttpUrl
 from rich.progress import track
 
@@ -217,7 +216,7 @@ class SourceImage(BaseModel):
             ]
             subprocess.run(cmd, capture_output=True, check=True)
 
-            # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
+            # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the final step of the conversion.
             generated_paths = self.working_dir.glob(f"*.{img_format}")
             for gp in generated_paths:
                 self.tiles.append(Tile(original_path=gp, source_image=self))
