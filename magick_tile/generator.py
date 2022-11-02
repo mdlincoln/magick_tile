@@ -14,7 +14,7 @@ from functools import cached_property
 from pydantic import BaseModel, Field, HttpUrl
 from rich.progress import track
 
-from magick_tile.settings import settings
+from magick_tile.settings import settings, IIIFFormats
 from magick_tile.manifest import IIIFManifest, TileSize, TileScale
 
 
@@ -35,6 +35,10 @@ class Tile(BaseModel):
     @property
     def parsed_filename(self) -> list[int]:
         return [int(i) for i in self.original_path.stem.split(",")]
+
+    @property
+    def format(self) -> IIIFFormats:
+        return IIIFFormats[self.original_path.suffix.lstrip(".")]
 
     @property
     def sf(self) -> int:
@@ -82,7 +86,7 @@ class Tile(BaseModel):
 
     @property
     def target_file(self) -> Path:
-        return self.target_dir / "default.jpg"
+        return self.target_dir / f"default.{self.format.value}"
 
     def resize(self) -> None:
         """Call imagemagick to convert the cropped fullsized tiles to their scaled-down versions, writing it to the final target folder specified by the user."""
@@ -106,6 +110,7 @@ def tempdir_path() -> Path:
 class DownsizedVersion(BaseModel):
     downsize_width: int
     source_image: "SourceImage"
+    format: IIIFFormats = IIIFFormats.jpg
 
     @property
     def target_directory(self) -> Path:
@@ -113,7 +118,7 @@ class DownsizedVersion(BaseModel):
 
     @property
     def target_file(self) -> Path:
-        return self.target_directory / "default.jpg"
+        return self.target_directory / f"default.{self.format.value}"
 
     def convert(self) -> None:
         self.target_directory.mkdir(parents=True, exist_ok=True)
@@ -136,6 +141,7 @@ class SourceImage(BaseModel):
     path: Path
     tile_size: int
     target_dir: Path
+    formats: list[IIIFFormats] = [IIIFFormats.jpg]
     max_area: Optional[int] = None
     max_width: Optional[int] = None
     max_height: Optional[int] = None
@@ -162,6 +168,10 @@ class SourceImage(BaseModel):
             )
 
     @property
+    def format(self) -> IIIFFormats:
+        return IIIFFormats[self.path.suffix.lstrip(".")]
+
+    @property
     def minimum_dimension(self) -> int:
         return self.dimensions.smaller
 
@@ -186,26 +196,27 @@ class SourceImage(BaseModel):
     def generate_tile_files(self) -> None:
         """Write multizised tile images"""
         for sf in track(self.scaling_factors, description="Tiling image..."):
-            cropsize: int = self.tile_size * sf
-            cmd: list[str | Path] = [
-                "convert",
-                self.path,
-                "-monitor",
-                "-crop",
-                f"{cropsize}x{cropsize}",
-                "-set",
-                "filename:tile",
-                "%[fx:page.x],%[fx:page.y],%[fx:w],%[fx:h]",  # rely on Imagemagick to tell us the resulting dimensions for the tiles it makes, which is especially useful on the non-square tiles from the right and bottom edges of images
-                "+repage",
-                "+adjoin",
-                self.working_dir / f"{cropsize},{sf},%[filename:tile].jpg",
-            ]
-            subprocess.run(cmd, capture_output=True, check=True)
+            for img_format in self.formats:
+                cropsize: int = self.tile_size * sf
+                cmd: list[str | Path] = [
+                    "convert",
+                    self.path,
+                    "-monitor",
+                    "-crop",
+                    f"{cropsize}x{cropsize}",
+                    "-set",
+                    "filename:tile",
+                    "%[fx:page.x],%[fx:page.y],%[fx:w],%[fx:h]",  # rely on Imagemagick to tell us the resulting dimensions for the tiles it makes, which is especially useful on the non-square tiles from the right and bottom edges of images
+                    "+repage",
+                    "+adjoin",
+                    self.working_dir / f"{cropsize},{sf},%[filename:tile].{img_format}",
+                ]
+                subprocess.run(cmd, capture_output=True, check=True)
 
-            # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
-            generated_paths = self.working_dir.glob("*.jpg")
-            for gp in generated_paths:
-                self.tiles.append(Tile(original_path=gp, source_image=self))
+                # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
+                generated_paths = self.working_dir.glob(f"*.{img_format}")
+                for gp in generated_paths:
+                    self.tiles.append(Tile(original_path=gp, source_image=self))
 
     def resize_tile_files(self) -> None:
         for t in track(self.tiles, description="Sizing and sorting tiles..."):
@@ -215,8 +226,11 @@ class SourceImage(BaseModel):
         """
         Create smaller derivatives of the full image.
         """
-        for ds in self.downsizing_levels:
-            DownsizedVersion(downsize_width=ds, source_image=self).convert()
+        for ds in track(self.downsizing_levels, description="Reduced sizes..."):
+            for img_format in self.formats:
+                DownsizedVersion(
+                    downsize_width=ds, source_image=self, format=img_format
+                ).convert()
 
     # @cached_property
     @property
@@ -226,6 +240,7 @@ class SourceImage(BaseModel):
             id=self.id,
             sizes=[TileSize(width=ds, height="full") for ds in self.downsizing_levels],
             tiles=[TileScale(width=self.tile_size, scaleFactors=self.scaling_factors)],
+            preferredFormats=self.formats,
             width=self.dimensions.width,
             height=self.dimensions.height,
             maxWidth=self.max_width,

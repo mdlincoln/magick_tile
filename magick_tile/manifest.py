@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from magick_tile.settings import IIIFFormats
+
 
 class TileScale(BaseModel):
     width: int
@@ -24,7 +26,7 @@ class IIIFManifest(BaseModel):
     profile: str = "level0"
     width: int
     height: int
-    preferredFormats: Optional[list[str]] = ["jpg"]
+    preferredFormats: Optional[list[IIIFFormats]] = [IIIFFormats.jpg]
     sizes: Optional[list[TileSize]] = None
     tiles: Optional[list[TileScale]] = None
     maxWidth: Optional[int] = None
