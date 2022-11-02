@@ -1,9 +1,12 @@
 [tool.poetry]
 authors = ["Matthew Lincoln <matthew.d.lincoln@gmail.com>"]
 description = "Use Imagemagick to efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0"
+keywords = ["iiif"]
 license = "MIT"
 name = "magick_tile"
-version = "0.1.0"
+readme = "README.md"
+repository = "https://github.com/mdlincoln/magick-tile"
+version = "0.1.1"
 
 [tool.poetry.dependencies]
 pydantic = "^1.9.1"
