@@ -1,5 +1,4 @@
 import json
-from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import pytest
@@ -10,9 +9,9 @@ from magick_tile.manifest import IIIFManifest, TileScale, TileSize
 
 
 @pytest.fixture
-def example_manifest_object() -> IIIFManifest:
+def example_manifest_object(example_id: str) -> IIIFManifest:
     return IIIFManifest(
-        id="https://example.com/images/foobar",  # type: ignore
+        id=example_id,  # type: ignore
         sizes=[TileSize(width=512, height="full")],
         tiles=[TileScale(width=512, scaleFactors=[4, 2])],
         width=6000,
@@ -21,13 +20,13 @@ def example_manifest_object() -> IIIFManifest:
 
 
 class TestManifest:
-    def test_manifest(self, example_manifest_object: IIIFManifest):
+    def test_manifest(self, example_manifest_object: IIIFManifest, example_id: str):
         assert example_manifest_object.json(
             by_alias=True, exclude_none=True
         ) == json.dumps(
             {
                 "@context": "http://iiif.io/api/image/3/context.json",
-                "id": "https://example.com/images/foobar",
+                "id": example_id,
                 "type": "ImageService3",
                 "protocol": "http://iiif.io/api/image",
                 "profile": "level0",
@@ -38,39 +37,6 @@ class TestManifest:
                 "tiles": [{"width": 512, "scaleFactors": [4, 2]}],
             }
         )
-
-
-@pytest.fixture
-def test_output_dir():
-    with TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
-
-
-@pytest.fixture
-def test_working_dir():
-    with TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
-
-
-@pytest.fixture
-def test_jpg() -> Path:
-    p = Path(__file__).parent.absolute() / "assets" / "complete-usable-accurate.jpg"
-    assert p.exists()
-    return p
-
-
-@pytest.fixture()
-def test_png() -> Path:
-    p = Path(__file__).parent.absolute() / "assets" / "complete-usable-accurate.png"
-    assert p.exists()
-    return p
-
-
-@pytest.fixture
-def tile_jpg() -> Path:
-    p = Path(__file__).parent.absolute() / "assets" / "256,2,0,0,512,512.jpg"
-    assert p.exists()
-    return p
 
 
 @pytest.fixture

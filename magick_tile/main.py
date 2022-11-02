@@ -8,8 +8,16 @@ app = typer.Typer()
 
 @app.command()
 def convert(
-    source: Path = typer.Argument(...),
-    output: Path = typer.Argument(..., help="Destination directory for tiles"),
+    source: Path = typer.Argument(
+        ..., file_okay=True, dir_okay=False, readable=True, exists=True
+    ),
+    output: Path = typer.Argument(
+        ...,
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        help="Destination directory for tiles",
+    ),
     identifier: str = typer.Argument(
         ...,
         help="Image identifier to be written to final info.json (e.g. https://example.com/iiif/my_image)",
