@@ -9,6 +9,7 @@ import subprocess
 from math import floor, ceil
 from tempfile import mkdtemp
 from pathlib import Path
+from itertools import product
 
 from functools import cached_property
 from pydantic import BaseModel, Field, HttpUrl
@@ -195,28 +196,31 @@ class SourceImage(BaseModel):
 
     def generate_tile_files(self) -> None:
         """Write multizised tile images"""
-        for sf in track(self.scaling_factors, description="Tiling image..."):
-            for img_format in self.formats:
-                cropsize: int = self.tile_size * sf
-                cmd: list[str | Path] = [
-                    "convert",
-                    self.path,
-                    "-monitor",
-                    "-crop",
-                    f"{cropsize}x{cropsize}",
-                    "-set",
-                    "filename:tile",
-                    "%[fx:page.x],%[fx:page.y],%[fx:w],%[fx:h]",  # rely on Imagemagick to tell us the resulting dimensions for the tiles it makes, which is especially useful on the non-square tiles from the right and bottom edges of images
-                    "+repage",
-                    "+adjoin",
-                    self.working_dir / f"{cropsize},{sf},%[filename:tile].{img_format}",
-                ]
-                subprocess.run(cmd, capture_output=True, check=True)
+        for sf, img_format in track(
+            product(self.scaling_factors, self.formats),
+            description="Tiling image...",
+            total=(len(self.scaling_factors) * len(self.formats)),
+        ):
+            cropsize: int = self.tile_size * sf
+            cmd: list[str | Path] = [
+                "convert",
+                self.path,
+                "-monitor",
+                "-crop",
+                f"{cropsize}x{cropsize}",
+                "-set",
+                "filename:tile",
+                "%[fx:page.x],%[fx:page.y],%[fx:w],%[fx:h]",  # rely on Imagemagick to tell us the resulting dimensions for the tiles it makes, which is especially useful on the non-square tiles from the right and bottom edges of images
+                "+repage",
+                "+adjoin",
+                self.working_dir / f"{cropsize},{sf},%[filename:tile].{img_format}",
+            ]
+            subprocess.run(cmd, capture_output=True, check=True)
 
-                # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
-                generated_paths = self.working_dir.glob(f"*.{img_format}")
-                for gp in generated_paths:
-                    self.tiles.append(Tile(original_path=gp, source_image=self))
+            # Imagemagick will create many files from this single command. Collect the filenames and parse them so that we have the necessary info for the ifnal step of the conversion.
+            generated_paths = self.working_dir.glob(f"*.{img_format}")
+            for gp in generated_paths:
+                self.tiles.append(Tile(original_path=gp, source_image=self))
 
     def resize_tile_files(self) -> None:
         for t in track(self.tiles, description="Sizing and sorting tiles..."):
@@ -226,7 +230,11 @@ class SourceImage(BaseModel):
         """
         Create smaller derivatives of the full image.
         """
-        for ds in track(self.downsizing_levels, description="Reduced sizes..."):
+        for ds, img_format in track(
+            product(self.downsizing_levels, self.formats),
+            total=(len(self.downsizing_levels) * len(self.formats)),
+            description="Reduced sizes...",
+        ):
             for img_format in self.formats:
                 DownsizedVersion(
                     downsize_width=ds, source_image=self, format=img_format
