@@ -17,8 +17,13 @@ class IIIFFormats(str, Enum):
     webp = "webp"
 
 
+class IIIFVersions(str, Enum):
+    _3_0 = "3.0"
+    # _2_1 = "2.1" Not yet implemented
+
+
 class IIIFFullSize(str, Enum):
-    _2 = "full"
+    _2 = "max"
     _3 = "max"
 
 

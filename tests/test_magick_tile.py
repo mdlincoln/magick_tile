@@ -13,7 +13,7 @@ from magick_tile.settings import IIIFFormats
 def example_manifest_object(example_id: str) -> IIIFManifest:
     return IIIFManifest(
         id=example_id,  # type: ignore
-        sizes=[TileSize(width=512, height="full")],
+        sizes=[TileSize(width=512, height="max")],
         tiles=[TileScale(width=512, scaleFactors=[4, 2])],
         width=6000,
         height=4000,
@@ -34,7 +34,7 @@ class TestManifest:
                 "width": 6000,
                 "height": 4000,
                 "preferredFormats": ["jpg"],
-                "sizes": [{"width": 512, "height": "full"}],
+                "sizes": [{"width": 512, "height": "max"}],
                 "tiles": [{"width": 512, "scaleFactors": [4, 2]}],
             }
         )
@@ -104,10 +104,10 @@ class TestSourceImage:
             "height": 1572,
             "preferredFormats": ["jpg"],
             "sizes": [
-                {"width": 256, "height": "full"},
-                {"width": 512, "height": "full"},
-                {"width": 1024, "height": "full"},
-                {"width": 2048, "height": "full"},
+                {"width": 256, "height": "max"},
+                {"width": 512, "height": "max"},
+                {"width": 1024, "height": "max"},
+                {"width": 2048, "height": "max"},
             ],
             "tiles": [{"width": 512, "scaleFactors": [2]}],
         }
@@ -138,10 +138,10 @@ class TestPngImage:
             "height": 1572,
             "preferredFormats": ["jpg", "png"],
             "sizes": [
-                {"width": 256, "height": "full"},
-                {"width": 512, "height": "full"},
-                {"width": 1024, "height": "full"},
-                {"width": 2048, "height": "full"},
+                {"width": 256, "height": "max"},
+                {"width": 512, "height": "max"},
+                {"width": 1024, "height": "max"},
+                {"width": 2048, "height": "max"},
             ],
             "tiles": [{"width": 512, "scaleFactors": [2]}],
         }

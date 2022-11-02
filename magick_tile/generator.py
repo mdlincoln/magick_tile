@@ -14,7 +14,7 @@ from itertools import product
 from pydantic import BaseModel, Field, HttpUrl
 from rich.progress import track
 
-from magick_tile.settings import settings, IIIFFormats
+from magick_tile.settings import settings, IIIFFormats, IIIFVersions
 from magick_tile.manifest import IIIFManifest, TileSize, TileScale
 
 
@@ -147,6 +147,7 @@ class SourceImage(BaseModel):
     max_height: Optional[int] = None
     tiles: list[Tile] = []
     working_dir: Path = Field(default_factory=tempdir_path)
+    version: IIIFVersions = IIIFVersions._3_0
 
     # @cached_property
     @property
@@ -245,7 +246,7 @@ class SourceImage(BaseModel):
         """Return manifest"""
         return IIIFManifest(
             id=self.id,
-            sizes=[TileSize(width=ds, height="full") for ds in self.downsizing_levels],
+            sizes=[TileSize(width=ds, height="max") for ds in self.downsizing_levels],
             tiles=[TileScale(width=self.tile_size, scaleFactors=self.scaling_factors)],
             preferredFormats=self.formats,
             width=self.dimensions.width,

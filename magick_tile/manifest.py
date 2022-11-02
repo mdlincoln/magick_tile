@@ -12,8 +12,8 @@ class TileScale(BaseModel):
 
 
 class TileSize(BaseModel):
-    width: Literal["full"] | int
-    height: Literal["full"] | int
+    width: Literal["max"] | int
+    height: Literal["max"] | int
 
 
 class IIIFManifest(BaseModel):
