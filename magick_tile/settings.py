@@ -3,10 +3,6 @@ from enum import Enum
 from pydantic import BaseSettings
 
 
-def power2(start: int, end: int) -> list[int]:
-    return [2**pow for pow in range(start, end)]
-
-
 class IIIFFormats(str, Enum):
     jpg = "jpg"
     tif = "tif"
@@ -28,8 +24,7 @@ class IIIFFullSize(str, Enum):
 
 
 class Settings(BaseSettings):
-    BASE_SCALING_FACTORS: list[int] = power2(1, 9)
-    BASE_SMALLER_SIZES: list[int] = power2(8, 16)
+    MINIMUMUM_DOWNSIZE_EXP: int = 8
 
 
 settings = Settings()

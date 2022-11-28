@@ -181,18 +181,26 @@ class SourceImage(BaseModel):
         """
         Compute downsizing levels such that the width of the largest reduced image is smaller than the width of the original image
         """
-        return [s for s in settings.BASE_SMALLER_SIZES if s < self.dimensions.width]
+        downsized_widths: list[int] = []
+        current_factor: int = settings.MINIMUMUM_DOWNSIZE_EXP
+        while (2**current_factor) < self.dimensions.width:
+            downsized_widths.append(2**current_factor)
+            current_factor += 1
+        return downsized_widths
 
     @property
     def scaling_factors(self) -> list[int]:
         """
         Compute scaling factors such that the largest tile made is smaller than the shorter dimension of the input image
         """
-        return [
-            sf
-            for sf in settings.BASE_SCALING_FACTORS
-            if sf < ceil(self.minimum_dimension / self.tile_size)
-        ]
+        scaling_widths: list[int] = []
+        current_scaling_factor = 1
+        while (2**current_scaling_factor) < ceil(
+            self.minimum_dimension / self.tile_size
+        ):
+            scaling_widths.append(2**current_scaling_factor)
+            current_scaling_factor += 1
+        return scaling_widths
 
     def generate_tile_files(self) -> None:
         """Write multizised tile images"""
