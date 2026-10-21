@@ -3,7 +3,7 @@ This takes inspiration heavily from https://github.com/zimeon/iiif/blob/master/i
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Type
 import re
 import subprocess
 from math import floor, ceil
@@ -15,7 +15,14 @@ from pydantic import BaseModel, Field, HttpUrl
 from rich.progress import track
 
 from magick_tile.settings import settings, IIIFFormats, IIIFVersions
-from magick_tile.manifest import IIIFManifest, TileSize, TileScale
+from magick_tile.manifest import (
+    IIIFManifest,
+    IIIFManifestSelector,
+    IIIFManifest_2_1,
+    IIIFManifest_3_0,
+    TileSize,
+    TileScale,
+)
 
 
 class Dimensions(BaseModel):
@@ -248,11 +255,15 @@ class SourceImage(BaseModel):
                     downsize_width=ds, source_image=self, format=img_format
                 ).convert()
 
+    @property
+    def manifest_class(self) -> Type[IIIFManifest_2_1] | Type[IIIFManifest_3_0]:
+        return IIIFManifestSelector(self.version)
+
     # @cached_property
     @property
     def manifest(self) -> IIIFManifest:
         """Return manifest"""
-        return IIIFManifest(
+        return self.manifest_class(
             id=self.id,
             sizes=[TileSize(width=ds, height="max") for ds in self.downsizing_levels],
             tiles=[TileScale(width=self.tile_size, scaleFactors=self.scaling_factors)],

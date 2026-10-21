@@ -43,6 +43,11 @@ def convert(
     """
 
     si = generator.SourceImage(
-        id=identifier, path=source, tile_size=tile_size, target_dir=output, formats=format, version=version  # type: ignore
+        id=identifier,
+        path=source,
+        tile_size=tile_size,
+        target_dir=output,
+        formats=format,
+        version=version,  # type: ignore
     )
     si.convert()
