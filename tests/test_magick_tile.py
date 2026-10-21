@@ -5,13 +5,13 @@ import pytest
 
 from pytest_subprocess import FakeProcess
 from magick_tile.generator import SourceImage, Tile, DownsizedVersion
-from magick_tile.manifest import IIIFManifest, TileScale, TileSize
+from magick_tile.manifest import IIIFManifest, IIIFManifest_3_0, TileScale, TileSize
 from magick_tile.settings import IIIFFormats
 
 
 @pytest.fixture
 def example_manifest_object(example_id: str) -> IIIFManifest:
-    return IIIFManifest(
+    return IIIFManifest_3_0(
         id=example_id,  # type: ignore
         sizes=[TileSize(width=512, height="max")],
         tiles=[TileScale(width=512, scaleFactors=[4, 2])],
@@ -22,22 +22,22 @@ def example_manifest_object(example_id: str) -> IIIFManifest:
 
 class TestManifest:
     def test_manifest(self, example_manifest_object: IIIFManifest, example_id: str):
-        assert example_manifest_object.json(
-            by_alias=True, exclude_none=True
-        ) == json.dumps(
-            {
-                "@context": "http://iiif.io/api/image/3/context.json",
-                "id": example_id,
-                "type": "ImageService3",
-                "protocol": "http://iiif.io/api/image",
-                "profile": "level0",
-                "width": 6000,
-                "height": 4000,
-                "preferredFormats": ["jpg"],
-                "sizes": [{"width": 512, "height": "max"}],
-                "tiles": [{"width": 512, "scaleFactors": [4, 2]}],
-            }
-        )
+        # Compare parsed payloads rather than raw strings: key order follows the
+        # model's field order, which is not part of the IIIF response contract.
+        assert json.loads(
+            example_manifest_object.json(by_alias=True, exclude_none=True)
+        ) == {
+            "@context": "http://iiif.io/api/image/3/context.json",
+            "id": example_id,
+            "type": "ImageService3",
+            "protocol": "http://iiif.io/api/image",
+            "profile": "level0",
+            "width": 6000,
+            "height": 4000,
+            "preferredFormats": ["jpg"],
+            "sizes": [{"width": 512, "height": "max"}],
+            "tiles": [{"width": 512, "scaleFactors": [4, 2]}],
+        }
 
 
 @pytest.fixture
