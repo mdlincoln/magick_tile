@@ -1,31 +1,42 @@
-[tool.poetry]
-authors = ["Matthew Lincoln <matthew.d.lincoln@gmail.com>"]
-description = "Use Imagemagick to efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0"
-keywords = ["iiif"]
-license = "MIT"
+[project]
 name = "magick_tile"
-readme = "README.md"
-repository = "https://github.com/mdlincoln/magick-tile"
 version = "0.1.1"
+description = "Use Imagemagick to efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10,<4"
+keywords = ["iiif"]
+authors = [{ name = "Matthew Lincoln", email = "matthew.d.lincoln@gmail.com" }]
+dependencies = [
+    "pydantic>=1.9.1,<2",
+    "typer[all]>=0.6.1,<0.7",
+    # typer 0.6.x calls click's make_metavar() with the pre-8.2 signature, which
+    # click 8.2 removed. Before this cap was declared, resolution picked up
+    # click 8.5 and every CLI invocation raised TypeError.
+    "click>=8.0,<8.2",
+]
 
-[tool.poetry.dependencies]
-pydantic = "^1.9.1"
-python = "^3.10"
-typer = {version = "^0.6.1", extras = ["all"]}
+[project.scripts]
+magick_tile = "magick_tile.main:app"
 
-[tool.poetry.group.dev.dependencies]
-black = "^22.6.0"
-flake8 = "^4.0.1"
-mypy = "^0.961"
-pytest-cov = "^3.0.0"
-pytest-subprocess = "^1.4.2"
+[project.urls]
+Repository = "https://github.com/mdlincoln/magick-tile"
+
+[dependency-groups]
+dev = [
+    "black>=22.6.0,<23",
+    "flake8>=4.0.1,<5",
+    "mypy>=0.961,<0.962",
+    "pytest-cov>=3.0.0,<4",
+    "pytest-subprocess>=1.4.2,<2",
+]
 
 [build-system]
-build-backend = "poetry.core.masonry.api"
-requires = ["poetry-core>=1.0.0"]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["magick_tile"]
 
 [tool.mypy]
 plugins = "pydantic.mypy"
-
-[tool.poetry.scripts]
-magick_tile = "magick_tile.main:app"

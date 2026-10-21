@@ -57,5 +57,35 @@ This will create and populate the specified output directory with tiles from a g
 
 N.b. because several of the Imagemagick utilities called here already utilize multiple cores, returns for running this script in parallel diminish rapidly.
 
+## Development
+
+Dependencies are managed with [uv](https://docs.astral.sh/uv/). `uv.lock` pins the exact
+versions used locally and in CI, so run project commands through `uv run` rather than
+activating an environment by hand.
+
+```
+uv sync            # create .venv and install runtime + dev dependencies
+uv run pytest      # run the test suite
+uv run mypy .      # type check
+uv run black .     # format
+uv run flake8 magick_tile tests
+```
+
+To change a dependency, edit `pyproject.toml` (`dependencies` or a group under
+`[dependency-groups]`) and run `uv lock`. CI installs with `uv sync --locked`, so a
+`pyproject.toml` change without a matching lock update fails the build.
+
+## Releasing
+
+Bump `version` in `pyproject.toml`, then build and upload:
+
+```
+uv build      # sdist + wheel, written to dist/
+uv publish    # upload to PyPI
+```
+
+`uv publish` takes credentials from `UV_PUBLISH_TOKEN` or `--token`; a PyPI API token
+scoped to this project is the simplest credential to use.
+
 ---
 [Matthew Lincoln](https://matthewlincoln.net)

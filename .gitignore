@@ -1,6 +1,7 @@
 out/
 *.png
 *.jpg
+.venv
 build
 dist
 magick_tile.egg-info
