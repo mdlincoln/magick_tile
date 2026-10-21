@@ -63,14 +63,27 @@ class TestImagemagick:
 def example_jpg_image(
     test_output_dir: Path, test_working_dir: Path, test_jpg: Path
 ) -> SourceImage:
-    return SourceImage(id="https://example.com/test.jpg", path=test_jpg, tile_size=512, target_dir=test_output_dir, working_dir=test_working_dir)  # type: ignore
+    return SourceImage(
+        id="https://example.com/test.jpg",
+        path=test_jpg,
+        tile_size=512,
+        target_dir=test_output_dir,
+        working_dir=test_working_dir,
+    )  # type: ignore
 
 
 @pytest.fixture
 def example_png_image(
     test_output_dir: Path, test_working_dir: Path, test_png: Path
 ) -> SourceImage:
-    return SourceImage(id="https://example.com/test.png", path=test_png, tile_size=512, formats=["jpg", "png"], target_dir=test_output_dir, working_dir=test_working_dir)  # type: ignore
+    return SourceImage(
+        id="https://example.com/test.png",
+        path=test_png,
+        tile_size=512,
+        formats=["jpg", "png"],
+        target_dir=test_output_dir,
+        working_dir=test_working_dir,
+    )  # type: ignore
 
 
 class TestSourceImage:

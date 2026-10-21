@@ -15,7 +15,7 @@ class IIIFFormats(str, Enum):
 
 class IIIFVersions(str, Enum):
     _3_0 = "3.0"
-    # _2_1 = "2.1" Not yet implemented
+    _2_1 = "2.1"
 
 
 class IIIFFullSize(str, Enum):
