@@ -52,6 +52,11 @@ class IIIFManifest_2_1(IIIFManifest):
     )
     sizes: Optional[list]
 
+    class Config:
+        # "id" carries the "@id" alias for JSON output, but SourceImage.manifest
+        # builds this model by field name, so accept both spellings.
+        allow_population_by_field_name = True
+
 
 class IIIFManifest_3_0(IIIFManifest):
     context: str = Field(
