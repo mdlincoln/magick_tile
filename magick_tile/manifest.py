@@ -19,7 +19,7 @@ class TileSize(BaseModel):
 class IIIFManifest(BaseModel):
     """Shared model for all versions of the IIIF Image API Info payload"""
 
-    id: str
+    id: HttpUrl
     protocol: str = "http://iiif.io/api/image"
     width: int
     height: int
@@ -54,9 +54,9 @@ class IIIFManifest_2_1(IIIFManifest):
     type: Literal["iiif:Image"] = Field(default="iiif:Image", alias="@type")
     # Either the bare level0 URI, or the list form [level0, {"formats": [...]}]
     # used to declare formats beyond the level0-required jpg (2.1 §5.2).
-    profile: Literal[
-        "http://iiif.io/api/image/2/level0.json"
-    ] | list = LEVEL0_PROFILE_2_1
+    profile: Literal["http://iiif.io/api/image/2/level0.json"] | list = (
+        LEVEL0_PROFILE_2_1
+    )
 
     class Config:
         # "id"/"type" carry the "@id"/"@type" aliases for JSON output, but
@@ -69,7 +69,6 @@ class IIIFManifest_3_0(IIIFManifest):
     context: str = Field(
         default="http://iiif.io/api/image/3/context.json", alias="@context"
     )
-    id: HttpUrl
     type: Literal["ImageService3"] = "ImageService3"
     profile: str = "level0"
     extraFormats: Optional[list[IIIFFormats]] = None

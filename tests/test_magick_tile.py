@@ -23,7 +23,7 @@ def example_manifest_object(example_id: str) -> IIIFManifest:
     # Hand-built fixture: 512 x 4000 / 6000 = 341.33 -> 341. The half-up
     # formula itself is exercised via TestSourceImage.test_manifest.
     return IIIFManifest_3_0(
-        id=example_id,  # type: ignore
+        id=example_id,
         sizes=[TileSize(width=512, height=341)],
         tiles=[TileScale(width=512, scaleFactors=[4, 2])],
         width=6000,
@@ -52,7 +52,9 @@ class TestManifest:
 
 @pytest.fixture
 def fake_convert():
-    with FakeProcess.context() as nested_process:
+    # FakeProcess implements the context-manager protocol at runtime, but its
+    # __exit__ signature is not modeled in a way ty accepts.
+    with FakeProcess.context() as nested_process:  # ty: ignore[invalid-context-manager]
         nested_process.register(["convert"])
         yield
 
@@ -79,7 +81,7 @@ def example_jpg_image(
         tile_size=512,
         target_dir=test_output_dir,
         working_dir=test_working_dir,
-    )  # type: ignore
+    )
 
 
 @pytest.fixture
@@ -93,7 +95,7 @@ def example_png_image(
         formats=["jpg", "png"],
         target_dir=test_output_dir,
         working_dir=test_working_dir,
-    )  # type: ignore
+    )
 
 
 @pytest.fixture
@@ -107,7 +109,7 @@ def example_2_1_image(
         target_dir=test_output_dir,
         working_dir=test_working_dir,
         version=IIIFVersions._2_1,
-    )  # type: ignore
+    )
 
 
 @pytest.fixture
@@ -122,7 +124,7 @@ def example_png_2_1_image(
         target_dir=test_output_dir,
         working_dir=test_working_dir,
         version=IIIFVersions._2_1,
-    )  # type: ignore
+    )
 
 
 class TestSourceImage:
@@ -467,7 +469,7 @@ class TestConstraintGuard:
             target_dir=test_output_dir,
             working_dir=test_working_dir,
             max_width=1000,
-        )  # type: ignore
+        )
         with pytest.raises(NotImplementedError):
             constrained.convert()
         # The guard fires before any subprocess runs: no partial output tree,

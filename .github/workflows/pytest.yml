@@ -19,8 +19,8 @@ jobs:
           enable-cache: true
       - name: Install dependencies
         run: uv sync --locked
-      - name: mypy
-        run: uv run mypy .
+      - name: pre-commit (ruff + ty)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
       - name: Pytest
         # pipefail so a failing test run is not masked by the tee exit status
         shell: bash -eo pipefail {0}

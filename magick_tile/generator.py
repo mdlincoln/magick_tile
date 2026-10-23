@@ -357,34 +357,29 @@ class SourceImage(BaseModel):
         ]
         tiles = [TileScale(width=self.tile_size, scaleFactors=self.scaling_factors)]
         if self.version is IIIFVersions._2_1:
+            # Construct from field names: the 2.1 payload serializes @id,
+            # @context and @type through output aliases, and parse_obj validates
+            # through allow_population_by_field_name. ty cannot model pydantic
+            # v1's alias rules for keyword construction.
+            payload: dict[str, object] = {
+                "id": self.id,
+                "sizes": sizes,
+                "tiles": tiles,
+                "width": dims.width,
+                "height": dims.height,
+                "maxWidth": self.max_width,
+                "maxHeight": self.max_height,
+                "maxArea": self.max_area,
+            }
             extra_formats = [f.value for f in self.formats if f is not IIIFFormats.jpg]
             if extra_formats:
                 # 2.1 §5.2: declare formats beyond the level0-required jpg in
                 # a profile description object appended to the level URI.
-                return IIIFManifest_2_1(
-                    id=self.id,
-                    sizes=sizes,
-                    tiles=tiles,
-                    profile=[
-                        LEVEL0_PROFILE_2_1,
-                        {"formats": extra_formats},
-                    ],
-                    width=dims.width,
-                    height=dims.height,
-                    maxWidth=self.max_width,
-                    maxHeight=self.max_height,
-                    maxArea=self.max_area,
-                )
-            return IIIFManifest_2_1(
-                id=self.id,
-                sizes=sizes,
-                tiles=tiles,
-                width=dims.width,
-                height=dims.height,
-                maxWidth=self.max_width,
-                maxHeight=self.max_height,
-                maxArea=self.max_area,
-            )
+                payload["profile"] = [
+                    LEVEL0_PROFILE_2_1,
+                    {"formats": extra_formats},
+                ]
+            return IIIFManifest_2_1.parse_obj(payload)
         return IIIFManifest_3_0(
             id=self.id,
             sizes=sizes,
