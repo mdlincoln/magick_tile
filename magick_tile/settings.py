@@ -19,7 +19,9 @@ class IIIFVersions(str, Enum):
 
 
 class IIIFFullSize(str, Enum):
-    _2 = "max"
+    # 2.1 §4.2 names the unscaled full image "full"; 3.0 §4.8 replaced that
+    # size keyword with "max".
+    _2 = "full"
     _3 = "max"
 
 

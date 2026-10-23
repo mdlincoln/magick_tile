@@ -1,9 +1,9 @@
-from typing import Literal, Optional, Type, ClassVar
+from typing import Final, Literal, Optional
 from pathlib import Path
 
 from pydantic import BaseModel, Field, HttpUrl
 
-from magick_tile.settings import IIIFFormats, IIIFVersions
+from magick_tile.settings import IIIFFormats
 
 
 class TileScale(BaseModel):
@@ -12,8 +12,8 @@ class TileScale(BaseModel):
 
 
 class TileSize(BaseModel):
-    width: Literal["max"] | int
-    height: Literal["max"] | int
+    width: int
+    height: int
 
 
 class IIIFManifest(BaseModel):
@@ -25,7 +25,11 @@ class IIIFManifest(BaseModel):
     height: int
     sizes: Optional[list[TileSize]] = None
     tiles: Optional[list[TileScale]] = None
-    preferredFormats: Optional[list[IIIFFormats]] = [IIIFFormats.jpg]
+    # preferredFormats is an Image API 3.0 property (§5.5); 2.1 payloads must
+    # not carry it. The 3.0 construction always passes it explicitly, so the
+    # None default only ensures 2.1 serialization drops the key entirely
+    # under exclude_none=True.
+    preferredFormats: Optional[list[IIIFFormats]] = None
     maxWidth: Optional[int] = None
     maxHeight: Optional[int] = None
     maxArea: Optional[int] = None
@@ -36,9 +40,8 @@ class IIIFManifest(BaseModel):
         output_file = output_dir / "info.json"
         output_file.write_text(self.json(by_alias=True, exclude_none=True, indent=2))
 
-    # TODO: sizes getter and setter
-    # 2.1 uses "full" for height
-    # 3.0 uses "max" for height
+
+LEVEL0_PROFILE_2_1: Final = "http://iiif.io/api/image/2/level0.json"
 
 
 class IIIFManifest_2_1(IIIFManifest):
@@ -46,15 +49,19 @@ class IIIFManifest_2_1(IIIFManifest):
         default="http://iiif.io/api/image/2/context.json", alias="@context"
     )
     id: HttpUrl = Field(..., alias="@id")
-    type: Literal["iiif:Image"] = "iiif:Image"
-    profile: Literal["http://iiif.io/api/image/2/level1.json"] = (
-        "http://iiif.io/api/image/2/level1.json"
-    )
-    sizes: Optional[list]
+    # 2.1 §5.2 names this property "@type" (and makes it optional); emitting
+    # the alias keeps 2.1 payloads free of 3.0's unqualified "type" key.
+    type: Literal["iiif:Image"] = Field(default="iiif:Image", alias="@type")
+    # Either the bare level0 URI, or the list form [level0, {"formats": [...]}]
+    # used to declare formats beyond the level0-required jpg (2.1 §5.2).
+    profile: Literal[
+        "http://iiif.io/api/image/2/level0.json"
+    ] | list = LEVEL0_PROFILE_2_1
 
     class Config:
-        # "id" carries the "@id" alias for JSON output, but SourceImage.manifest
-        # builds this model by field name, so accept both spellings.
+        # "id"/"type" carry the "@id"/"@type" aliases for JSON output, but
+        # SourceImage.manifest builds this model by field name, so accept both
+        # spellings.
         allow_population_by_field_name = True
 
 
@@ -65,14 +72,4 @@ class IIIFManifest_3_0(IIIFManifest):
     id: HttpUrl
     type: Literal["ImageService3"] = "ImageService3"
     profile: str = "level0"
-
-
-def IIIFManifestSelector(
-    version: IIIFVersions = IIIFVersions._3_0,
-) -> Type[IIIFManifest_2_1] | Type[IIIFManifest_3_0]:
-    """Return manifest class for given version"""
-    if version is IIIFVersions._2_1:
-        return IIIFManifest_2_1
-    if version is IIIFVersions._3_0:
-        return IIIFManifest_3_0
-    raise NotImplementedError
+    extraFormats: Optional[list[IIIFFormats]] = None
