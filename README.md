@@ -94,12 +94,19 @@ versions used locally and in CI, so run project commands through `uv run` rather
 activating an environment by hand.
 
 ```
-uv sync            # create .venv and install runtime + dev dependencies
-uv run pytest      # run the test suite
-uv run mypy .      # type check
-uv run black .     # format
-uv run flake8 magick_tile tests
+uv sync                    # create .venv and install runtime + dev dependencies
+uv run pytest              # run the test suite
+uv run ty check            # type check
+uv run ruff check          # lint
+uv run ruff format         # format
+uv run pre-commit install  # enforce ruff and ty on every commit
 ```
+
+`.pre-commit-config.yaml` runs ruff's linter, ruff's formatter and ty on staged
+files. The ruff and ty versions are pinned twice — in the `dev` dependency group
+(for `uv run`) and as hook revs in the pre-commit config — so bump both together.
+CI runs the same hooks across every file, which means skipping them locally with
+`--no-verify` still fails the build.
 
 To change a dependency, edit `pyproject.toml` (`dependencies` or a group under
 `[dependency-groups]`) and run `uv lock`. CI installs with `uv sync --locked`, so a

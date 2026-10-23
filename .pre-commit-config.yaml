@@ -1,0 +1,21 @@
+# Hooks that enforce style and types before every commit. Install them once per
+# clone with `uv run pre-commit install`.
+repos:
+  # Ruff replaces black (formatting) and flake8 (linting). Keep this rev in
+  # sync with the ruff dev dependency in pyproject.toml.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.2
+    hooks:
+      # Fix before formatting: fixes can produce code the formatter must lay
+      # out again.
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # ty replaces mypy. The hook resolves dependencies from pyproject.toml, so
+  # they do not need to be duplicated here. Keep this rev in sync with the ty
+  # dev dependency in pyproject.toml.
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.0.91
+    hooks:
+      - id: ty

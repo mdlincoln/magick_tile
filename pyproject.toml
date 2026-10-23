@@ -24,11 +24,11 @@ Repository = "https://github.com/mdlincoln/magick-tile"
 
 [dependency-groups]
 dev = [
-    "black>=22.6.0,<23",
-    "flake8>=4.0.1,<5",
-    "mypy>=0.961,<0.962",
+    "pre-commit>=4.6.2,<5",
     "pytest-cov>=3.0.0,<4",
     "pytest-subprocess>=1.4.2,<2",
+    "ruff>=0.17.2,<0.18",
+    "ty>=0.0.91,<0.1",
 ]
 
 [build-system]
@@ -38,5 +38,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["magick_tile"]
 
-[tool.mypy]
-plugins = "pydantic.mypy"
+[tool.ruff]
+# 88 keeps the layout the codebase was formatted at under black.
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+# pycodestyle errors and warnings plus pyflakes: the rule set flake8 enforced
+# before ruff took over linting.
+select = ["E", "W", "F"]

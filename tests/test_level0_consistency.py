@@ -64,7 +64,7 @@ def converted_tree(request: pytest.FixtureRequest) -> Iterator[ConvertedTree]:
             target_dir=Path(out),
             working_dir=Path(work),
             version=version,
-        )  # type: ignore
+        )
         source.convert()
         info = json.loads((Path(out) / "info.json").read_text())
         yield ConvertedTree(version=version, info=info, output_dir=Path(out))
@@ -156,6 +156,6 @@ class TestLevel0Consistency:
                         )
                         assert path.exists(), f"missing expected tile {path}"
                         found_tile = True
-                assert (
-                    found_tile
-                ), f"no full-crop tile found for scale factor {scale_factor}"
+                assert found_tile, (
+                    f"no full-crop tile found for scale factor {scale_factor}"
+                )

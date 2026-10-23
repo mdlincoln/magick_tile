@@ -52,6 +52,6 @@ def convert(
         tile_size=tile_size,
         target_dir=output,
         formats=format,
-        version=version,  # type: ignore
+        version=version,
     )
     si.convert()
