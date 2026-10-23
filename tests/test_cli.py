@@ -62,7 +62,9 @@ def test_invalid_file(test_jpg: Path, test_output_dir: Path, example_id: str):
         app,
         [str(test_output_dir), str(test_output_dir), example_id],
     )
-    assert "Invalid value for 'SOURCE'" in result.stdout
+    # typer 0.27 renders usage errors on stderr, with the lowercase parameter
+    # name.
+    assert "Invalid value for 'source'" in result.stderr
     assert result.exit_code == 2
 
 
@@ -71,5 +73,5 @@ def test_invalid_output(test_jpg: Path, test_output_dir: Path, example_id: str):
         app,
         [str(test_jpg), str(test_jpg), example_id],
     )
-    assert "Invalid value for 'OUTPUT'" in result.stdout
+    assert "Invalid value for 'output'" in result.stderr
     assert result.exit_code == 2
