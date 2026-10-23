@@ -27,7 +27,10 @@ def convert(
     identifier: str = typer.Argument(
         ...,
         show_default=False,
-        help="Image identifier to be written to final info.json (e.g. https://example.com/iiif/my_image)",
+        help=(
+            "Image identifier to be written to final info.json "
+            "(e.g. https://example.com/iiif/my_image)"
+        ),
     ),
     tile_size: int = typer.Option(default=512, help="Tile size to produce"),
     format: list[settings.IIIFFormats] = typer.Option(
@@ -39,7 +42,8 @@ def convert(
     ),
 ):
     """
-    Efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0.
+    Efficiently create derivative tiles of a very large image, and structure
+    them into directories compliant with IIIF Level 0.
     """
 
     si = generator.SourceImage(
