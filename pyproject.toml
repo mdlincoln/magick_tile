@@ -9,11 +9,9 @@ keywords = ["iiif"]
 authors = [{ name = "Matthew Lincoln", email = "matthew.d.lincoln@gmail.com" }]
 dependencies = [
     "pydantic>=1.9.1,<2",
-    "typer[all]>=0.6.1,<0.7",
-    # typer 0.6.x calls click's make_metavar() with the pre-8.2 signature, which
-    # click 8.2 removed. Before this cap was declared, resolution picked up
-    # click 8.5 and every CLI invocation raised TypeError.
-    "click>=8.0,<8.2",
+    # typer 0.26+ vendors Click, so click is no longer a dependency and the
+    # old click cap (for typer 0.6's pre-8.2 make_metavar call) is gone.
+    "typer>=0.27.3,<0.28",
 ]
 
 [project.scripts]

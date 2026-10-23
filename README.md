@@ -21,27 +21,27 @@ pip install magick-tile
 ## Run
 
 ```
- Usage: magick_tile [OPTIONS] SOURCE OUTPUT IDENTIFIER
+ Usage: magick_tile [OPTIONS] {source} {output} {identifier}
 
  Efficiently create derivative tiles of a very large image, and structure them
  into directories compliant with IIIF Level 0.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source          FILE       [required]                                   │
-│ *    output          DIRECTORY  Destination directory for tiles [required]   │
-│ *    identifier      TEXT       Image identifier to be written to final      │
-│                                 info.json (e.g.                              │
-│                                 https://example.com/iiif/my_image)           │
-│                                 [required]                                   │
+│ *    source          <file>       [required]                                 │
+│ *    output          <directory>  Destination directory for tiles [required] │
+│ *    identifier      <str>        Image identifier to be written to final    │
+│                                   info.json (e.g.                            │
+│                                   https://example.com/iiif/my_image)         │
+│                                   [required]                                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --tile-size                 INTEGER                 Tile size to produce     │
+│ --tile-size                 <int>                   Tile size to produce     │
 │                                                     [default: 512]           │
-│ --format                    [jpg|tif|png|gif|jp2|p  File formats to generate │
-│                             df|webp]                (must be supported by    │
+│ --format                    <jpg|tif|png|gif|jp2|p  File formats to generate │
+│                             df|webp>                (must be supported by    │
 │                                                     Imagemagick's 'convert') │
 │                                                     [default: jpg]           │
-│ --version                   [3.0|2.1]               IIIF Image API version   │
+│ --version                   <3.0|2.1>               IIIF Image API version   │
 │                                                     [default: 3.0]           │
 │ --install-completion                                Install completion for   │
 │                                                     the current shell.       │
