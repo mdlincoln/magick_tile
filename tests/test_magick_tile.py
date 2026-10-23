@@ -6,14 +6,25 @@ import pytest
 from pytest_subprocess import FakeProcess
 from magick_tile.generator import SourceImage, Tile, DownsizedVersion
 from magick_tile.manifest import IIIFManifest, IIIFManifest_3_0, TileScale, TileSize
-from magick_tile.settings import IIIFFormats
+from magick_tile.settings import IIIFFormats, IIIFVersions
+
+# Aspect-correct half-up heights for the 2676x1572 fixture image, keyed by
+# downsized width (e.g. 1024 x 1572 / 2676 = 601.54 -> 602).
+EXPECTED_SIZES = [
+    {"width": 256, "height": 150},
+    {"width": 512, "height": 301},
+    {"width": 1024, "height": 602},
+    {"width": 2048, "height": 1203},
+]
 
 
 @pytest.fixture
 def example_manifest_object(example_id: str) -> IIIFManifest:
+    # Hand-built fixture: 512 x 4000 / 6000 = 341.33 -> 341. The half-up
+    # formula itself is exercised via TestSourceImage.test_manifest.
     return IIIFManifest_3_0(
         id=example_id,  # type: ignore
-        sizes=[TileSize(width=512, height="max")],
+        sizes=[TileSize(width=512, height=341)],
         tiles=[TileScale(width=512, scaleFactors=[4, 2])],
         width=6000,
         height=4000,
@@ -34,8 +45,7 @@ class TestManifest:
             "profile": "level0",
             "width": 6000,
             "height": 4000,
-            "preferredFormats": ["jpg"],
-            "sizes": [{"width": 512, "height": "max"}],
+            "sizes": [{"width": 512, "height": 341}],
             "tiles": [{"width": 512, "scaleFactors": [4, 2]}],
         }
 
@@ -50,11 +60,11 @@ def fake_convert():
 class TestImagemagick:
     @pytest.mark.skip
     def test_missing_im(self, fp):
-        with pytest.raises(Exception) as ex:
-            import magick_tile
+        with pytest.raises(Exception):
+            import magick_tile  # noqa: F401 — import runs the ImageMagick check
 
     def test_has_im(self, fake_convert):
-        import magick_tile
+        import magick_tile  # noqa: F401 — import runs the ImageMagick check
 
         assert True
 
@@ -86,6 +96,35 @@ def example_png_image(
     )  # type: ignore
 
 
+@pytest.fixture
+def example_2_1_image(
+    test_output_dir: Path, test_working_dir: Path, test_jpg: Path
+) -> SourceImage:
+    return SourceImage(
+        id="https://example.com/test.jpg",
+        path=test_jpg,
+        tile_size=512,
+        target_dir=test_output_dir,
+        working_dir=test_working_dir,
+        version=IIIFVersions._2_1,
+    )  # type: ignore
+
+
+@pytest.fixture
+def example_png_2_1_image(
+    test_output_dir: Path, test_working_dir: Path, test_png: Path
+) -> SourceImage:
+    return SourceImage(
+        id="https://example.com/test.png",
+        path=test_png,
+        tile_size=512,
+        formats=["jpg", "png"],
+        target_dir=test_output_dir,
+        working_dir=test_working_dir,
+        version=IIIFVersions._2_1,
+    )  # type: ignore
+
+
 class TestSourceImage:
     def test_dimenions(self, example_jpg_image: SourceImage):
         assert example_jpg_image.dimensions.width == 2676
@@ -106,6 +145,12 @@ class TestSourceImage:
     def test_scaling_factors(self, example_jpg_image: SourceImage):
         assert example_jpg_image.scaling_factors == [2]
 
+    def test_downsized_height(self, example_jpg_image: SourceImage):
+        assert [
+            example_jpg_image.downsized_height(width)
+            for width in [256, 512, 1024, 2048]
+        ] == [150, 301, 602, 1203]
+
     def test_manifest(self, example_jpg_image: SourceImage):
         assert example_jpg_image.manifest.dict(exclude_none=True) == {
             "context": "http://iiif.io/api/image/3/context.json",
@@ -116,12 +161,7 @@ class TestSourceImage:
             "width": 2676,
             "height": 1572,
             "preferredFormats": ["jpg"],
-            "sizes": [
-                {"width": 256, "height": "max"},
-                {"width": 512, "height": "max"},
-                {"width": 1024, "height": "max"},
-                {"width": 2048, "height": "max"},
-            ],
+            "sizes": EXPECTED_SIZES,
             "tiles": [{"width": 512, "scaleFactors": [2]}],
         }
 
@@ -150,14 +190,48 @@ class TestPngImage:
             "width": 2676,
             "height": 1572,
             "preferredFormats": ["jpg", "png"],
-            "sizes": [
-                {"width": 256, "height": "max"},
-                {"width": 512, "height": "max"},
-                {"width": 1024, "height": "max"},
-                {"width": 2048, "height": "max"},
-            ],
+            "extraFormats": ["png"],
+            "sizes": EXPECTED_SIZES,
             "tiles": [{"width": 512, "scaleFactors": [2]}],
         }
+
+
+class TestVersionPayloads:
+    def test_manifest_3_0_extra_formats(self, example_png_image: SourceImage):
+        payload = json.loads(
+            example_png_image.manifest.json(by_alias=True, exclude_none=True)
+        )
+        # extraFormats lists only formats beyond the level0-required jpg,
+        # while preferredFormats lists everything the tree serves.
+        assert payload["extraFormats"] == ["png"]
+        assert payload["preferredFormats"] == ["jpg", "png"]
+
+    def test_manifest_2_1_payload(self, example_2_1_image: SourceImage):
+        payload = json.loads(
+            example_2_1_image.manifest.json(by_alias=True, exclude_none=True)
+        )
+        assert payload["@context"] == "http://iiif.io/api/image/2/context.json"
+        assert payload["@id"] == "https://example.com/test.jpg"
+        assert payload["@type"] == "iiif:Image"
+        assert payload["protocol"] == "http://iiif.io/api/image"
+        assert payload["profile"] == "http://iiif.io/api/image/2/level0.json"
+        assert payload["width"] == 2676
+        assert payload["height"] == 1572
+        assert payload["sizes"] == EXPECTED_SIZES
+        # 2.x has neither preferredFormats nor 3.0's unqualified "type" key.
+        assert "preferredFormats" not in payload
+        assert "type" not in payload
+        assert "extraFormats" not in payload
+
+    def test_manifest_2_1_extra_formats(self, example_png_2_1_image: SourceImage):
+        payload = json.loads(
+            example_png_2_1_image.manifest.json(by_alias=True, exclude_none=True)
+        )
+        assert payload["profile"] == [
+            "http://iiif.io/api/image/2/level0.json",
+            {"formats": ["png"]},
+        ]
+        assert "extraFormats" not in payload
 
 
 @pytest.fixture
@@ -175,6 +249,11 @@ def example_downsized_png(example_png_image: SourceImage) -> DownsizedVersion:
     return DownsizedVersion(
         downsize_width=512, source_image=example_png_image, format=IIIFFormats.png
     )
+
+
+@pytest.fixture
+def example_downsized_2_1(example_2_1_image: SourceImage) -> DownsizedVersion:
+    return DownsizedVersion(downsize_width=512, source_image=example_2_1_image)
 
 
 class TestTile:
@@ -215,19 +294,41 @@ class TestDownsizedVersion:
     def test_target_directory(
         self, example_downsized_version: DownsizedVersion, test_output_dir: Path
     ):
+        assert example_downsized_version.downsize_height == 301
+        # 3.0 canonical size form is w,h (Image API 3.0 §4.8).
         assert (
             example_downsized_version.target_directory
-            == test_output_dir / "full" / "512," / "0"
+            == test_output_dir / "full" / "512,301" / "0"
         )
         assert (
             example_downsized_version.target_file
-            == test_output_dir / "full" / "512," / "0" / "default.jpg"
+            == test_output_dir / "full" / "512,301" / "0" / "default.jpg"
         )
 
     def test_convert(self, example_downsized_version: DownsizedVersion):
         assert not example_downsized_version.target_file.exists()
         example_downsized_version.convert()
         assert example_downsized_version.target_file.exists()
+
+
+class TestDownsizedVersion21:
+    def test_target_directory(
+        self, example_downsized_2_1: DownsizedVersion, test_output_dir: Path
+    ):
+        # 2.1 §5.2 canonical size form for listed sizes is w,.
+        assert (
+            example_downsized_2_1.target_directory
+            == test_output_dir / "full" / "512," / "0"
+        )
+        assert (
+            example_downsized_2_1.target_file
+            == test_output_dir / "full" / "512," / "0" / "default.jpg"
+        )
+
+    def test_convert(self, example_downsized_2_1: DownsizedVersion):
+        assert not example_downsized_2_1.target_file.exists()
+        example_downsized_2_1.convert()
+        assert example_downsized_2_1.target_file.exists()
 
 
 class TestPngDownsizedVersion:
@@ -236,17 +337,17 @@ class TestPngDownsizedVersion:
     ):
         assert (
             example_downsized_png.target_directory
-            == test_output_dir / "full" / "512," / "0"
+            == test_output_dir / "full" / "512,301" / "0"
         )
         assert (
             example_downsized_png.target_file
-            == test_output_dir / "full" / "512," / "0" / "default.png"
+            == test_output_dir / "full" / "512,301" / "0" / "default.png"
         )
 
-    def test_convert(self, example_downsized_version: DownsizedVersion):
-        assert not example_downsized_version.target_file.exists()
-        example_downsized_version.convert()
-        assert example_downsized_version.target_file.exists()
+    def test_convert(self, example_downsized_png: DownsizedVersion):
+        assert not example_downsized_png.target_file.exists()
+        example_downsized_png.convert()
+        assert example_downsized_png.target_file.exists()
 
 
 class TestImageProcess:
@@ -258,7 +359,7 @@ class TestImageProcess:
         assert example_jpg_image.working_dir == test_working_dir
         assert len(list(test_working_dir.glob("*"))) == 0
         example_jpg_image.generate_tile_files()
-        (test_working_dir / "1024,2,0,0,1024,1024.jpg").exists()
+        assert (test_working_dir / "1024,2,0,0,1024,1024.jpg").exists()
 
     def test_resize_tile_files(
         self,
@@ -280,7 +381,14 @@ class TestImageProcess:
         assert example_jpg_image.target_dir == test_output_dir
         assert len(list(test_output_dir.glob("*"))) == 0
         example_jpg_image.generate_reduced_versions()
-        assert (test_output_dir / "full" / "1024," / "0" / "default.jpg").exists()
+        assert (test_output_dir / "full" / "1024,602" / "0" / "default.jpg").exists()
+
+    def test_generate_full_size(
+        self, example_jpg_image: SourceImage, test_output_dir: Path
+    ):
+        assert len(list(test_output_dir.glob("*"))) == 0
+        example_jpg_image.generate_full_size()
+        assert (test_output_dir / "full" / "max" / "0" / "default.jpg").exists()
 
 
 class TestMultiFormatProcess:
@@ -318,8 +426,8 @@ class TestMultiFormatProcess:
         assert example_png_image.target_dir == test_output_dir
         assert len(list(test_output_dir.glob("*"))) == 0
         example_png_image.generate_reduced_versions()
-        assert (test_output_dir / "full" / "1024," / "0" / "default.png").exists()
-        assert (test_output_dir / "full" / "1024," / "0" / "default.jpg").exists()
+        assert (test_output_dir / "full" / "1024,602" / "0" / "default.png").exists()
+        assert (test_output_dir / "full" / "1024,602" / "0" / "default.jpg").exists()
 
 
 class TestManifestOutput:
@@ -341,7 +449,29 @@ class TestCompleteOutput:
         example_jpg_image.convert()
         info_file_path = test_output_dir / "info.json"
         assert info_file_path.exists()
-        assert (test_output_dir / "full" / "1024," / "0" / "default.jpg").exists()
+        assert (test_output_dir / "full" / "1024,602" / "0" / "default.jpg").exists()
+        assert (test_output_dir / "full" / "max" / "0" / "default.jpg").exists()
         assert (
             test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
         ).exists()
+
+
+class TestConstraintGuard:
+    def test_full_size_rejects_constraints(
+        self, test_jpg: Path, test_output_dir: Path, test_working_dir: Path
+    ):
+        constrained = SourceImage(
+            id="https://example.com/test.jpg",
+            path=test_jpg,
+            tile_size=512,
+            target_dir=test_output_dir,
+            working_dir=test_working_dir,
+            max_width=1000,
+        )  # type: ignore
+        with pytest.raises(NotImplementedError):
+            constrained.convert()
+        # The guard fires before any subprocess runs: no partial output tree,
+        # not even a stray tile directory.
+        assert list(test_output_dir.glob("*")) == []
+        assert not (test_output_dir / "info.json").exists()
+        assert not (test_output_dir / "full").exists()
