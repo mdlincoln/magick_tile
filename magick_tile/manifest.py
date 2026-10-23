@@ -1,7 +1,7 @@
 from typing import Final, Literal, Optional
 from pathlib import Path
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from magick_tile.settings import IIIFFormats
 
@@ -38,7 +38,9 @@ class IIIFManifest(BaseModel):
     def write_info_file(self, output_dir: Path) -> None:
         """Write json serialization to info.json at the specified output directory."""
         output_file = output_dir / "info.json"
-        output_file.write_text(self.json(by_alias=True, exclude_none=True, indent=2))
+        output_file.write_text(
+            self.model_dump_json(by_alias=True, exclude_none=True, indent=2)
+        )
 
 
 LEVEL0_PROFILE_2_1: Final = "http://iiif.io/api/image/2/level0.json"
@@ -58,11 +60,10 @@ class IIIFManifest_2_1(IIIFManifest):
         LEVEL0_PROFILE_2_1
     )
 
-    class Config:
-        # "id"/"type" carry the "@id"/"@type" aliases for JSON output, but
-        # SourceImage.manifest builds this model by field name, so accept both
-        # spellings.
-        allow_population_by_field_name = True
+    # "id"/"type" carry the "@id"/"@type" aliases for JSON output, but
+    # SourceImage.manifest builds this model by field name, so accept both
+    # spellings.
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IIIFManifest_3_0(IIIFManifest):

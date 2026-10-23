@@ -36,7 +36,7 @@ class TestManifest:
         # Compare parsed payloads rather than raw strings: key order follows the
         # model's field order, which is not part of the IIIF response contract.
         assert json.loads(
-            example_manifest_object.json(by_alias=True, exclude_none=True)
+            example_manifest_object.model_dump_json(by_alias=True, exclude_none=True)
         ) == {
             "@context": "http://iiif.io/api/image/3/context.json",
             "id": example_id,
@@ -154,7 +154,9 @@ class TestSourceImage:
         ] == [150, 301, 602, 1203]
 
     def test_manifest(self, example_jpg_image: SourceImage):
-        assert example_jpg_image.manifest.dict(exclude_none=True) == {
+        assert example_jpg_image.manifest.model_dump(
+            mode="json", exclude_none=True
+        ) == {
             "context": "http://iiif.io/api/image/3/context.json",
             "id": "https://example.com/test.jpg",
             "type": "ImageService3",
@@ -183,7 +185,9 @@ class TestPngImage:
         assert example_png_image.scaling_factors == [2]
 
     def test_manifest(self, example_png_image: SourceImage):
-        assert example_png_image.manifest.dict(exclude_none=True) == {
+        assert example_png_image.manifest.model_dump(
+            mode="json", exclude_none=True
+        ) == {
             "context": "http://iiif.io/api/image/3/context.json",
             "id": "https://example.com/test.png",
             "type": "ImageService3",
@@ -201,7 +205,7 @@ class TestPngImage:
 class TestVersionPayloads:
     def test_manifest_3_0_extra_formats(self, example_png_image: SourceImage):
         payload = json.loads(
-            example_png_image.manifest.json(by_alias=True, exclude_none=True)
+            example_png_image.manifest.model_dump_json(by_alias=True, exclude_none=True)
         )
         # extraFormats lists only formats beyond the level0-required jpg,
         # while preferredFormats lists everything the tree serves.
@@ -210,7 +214,7 @@ class TestVersionPayloads:
 
     def test_manifest_2_1_payload(self, example_2_1_image: SourceImage):
         payload = json.loads(
-            example_2_1_image.manifest.json(by_alias=True, exclude_none=True)
+            example_2_1_image.manifest.model_dump_json(by_alias=True, exclude_none=True)
         )
         assert payload["@context"] == "http://iiif.io/api/image/2/context.json"
         assert payload["@id"] == "https://example.com/test.jpg"
@@ -227,7 +231,9 @@ class TestVersionPayloads:
 
     def test_manifest_2_1_extra_formats(self, example_png_2_1_image: SourceImage):
         payload = json.loads(
-            example_png_2_1_image.manifest.json(by_alias=True, exclude_none=True)
+            example_png_2_1_image.manifest.model_dump_json(
+                by_alias=True, exclude_none=True
+            )
         )
         assert payload["profile"] == [
             "http://iiif.io/api/image/2/level0.json",
@@ -442,7 +448,9 @@ class TestManifestOutput:
         assert info_file_path.exists()
         with open(info_file_path, "r") as infof:
             reread_obj = json.load(infof)
-            assert reread_obj["id"] == example_jpg_image.id
+            # HttpUrl is not a str subclass in pydantic v2, so compare the
+            # serialized form.
+            assert reread_obj["id"] == str(example_jpg_image.id)
 
 
 class TestCompleteOutput:

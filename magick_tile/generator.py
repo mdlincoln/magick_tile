@@ -358,9 +358,9 @@ class SourceImage(BaseModel):
         tiles = [TileScale(width=self.tile_size, scaleFactors=self.scaling_factors)]
         if self.version is IIIFVersions._2_1:
             # Construct from field names: the 2.1 payload serializes @id,
-            # @context and @type through output aliases, and parse_obj validates
-            # through allow_population_by_field_name. ty cannot model pydantic
-            # v1's alias rules for keyword construction.
+            # @context and @type through output aliases, and model_validate
+            # accepts field names via populate_by_name. ty cannot model
+            # pydantic's alias rules for keyword construction.
             payload: dict[str, object] = {
                 "id": self.id,
                 "sizes": sizes,
@@ -379,7 +379,7 @@ class SourceImage(BaseModel):
                     LEVEL0_PROFILE_2_1,
                     {"formats": extra_formats},
                 ]
-            return IIIFManifest_2_1.parse_obj(payload)
+            return IIIFManifest_2_1.model_validate(payload)
         return IIIFManifest_3_0(
             id=self.id,
             sizes=sizes,
@@ -438,5 +438,5 @@ class SourceImage(BaseModel):
         self.write_info()
 
 
-Tile.update_forward_refs()
-DownsizedVersion.update_forward_refs()
+Tile.model_rebuild()
+DownsizedVersion.model_rebuild()
