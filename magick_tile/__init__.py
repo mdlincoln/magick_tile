@@ -8,11 +8,12 @@ def is_magick_installed() -> bool:
     try:
         subprocess.run(["convert", "--version"], stdout=subprocess.PIPE)
         return True
-    except:
+    except Exception:
         return False
 
 
 if not is_magick_installed():
     raise Exception(
-        "ImageMagick's 'convert' does not appear to be installed or available on your $PATH"
+        "ImageMagick's 'convert' does not appear to be installed or available "
+        "on your $PATH"
     )
