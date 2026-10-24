@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>magick_tile e2e viewer — Leaflet</title>
+    <!-- leaflet.css references control images (layers.png, marker-icon.png)
+         that are deliberately absent: every control is disabled below and the
+         plugin draws no markers. -->
+    <link rel="stylesheet" href="vendor/leaflet-1.9.4.css" />
+    <style>
+      html,
+      body,
+      #map {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script src="vendor/leaflet-1.9.4.js"></script>
+    <script src="vendor/leaflet-iiif-3.0.0.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const infoUrl = params.get("src");
+
+      // The uniform viewer contract every backend page exposes, so the harness
+      // reads one shape regardless of library.
+      window.__viewer = {
+        opened: false,
+        openFailed: null,
+        loadedCount: 0,
+        failed: [],
+        dimensions: null,
+        level: null,
+        // Leaflet tracks in-flight tile loads itself: the GridLayer sets
+        // _loading on "loading" and clears it on "load", which also fires after
+        // tile errors. The harness waits two animation frames before polling,
+        // so loads queued by a fit have started by the first poll.
+        get idle() {
+          return layer !== null && !layer.isLoading();
+        },
+      };
+
+      let map = null;
+      let layer = null;
+      let layerReady = false;
+
+      // leaflet-iiif walks tiers as scale = 2 ** (maxNativeZoom - zoom), with
+      // maxNativeZoom = max(ceilLog2(width / tileSize), ceilLog2(height /
+      // tileSize), 0), so its zoom runs the opposite way to a IIIF scale
+      // factor: zoom 0 is the coarsest tier, maxNativeZoom is native.
+      function scaleForZoom(zoom) {
+        return Math.pow(2, layer.maxNativeZoom - zoom);
+      }
+
+      // L.CRS.Simple: pointToLatLng divides the pixel point by 2 ** zoom and
+      // negates y, so a Leaflet pixel at zoom z is image pixels / 2 **
+      // (maxNativeZoom - z). Converting back, an image point sits at
+      // lng = ix / 2 ** maxNativeZoom, lat = -iy / 2 ** maxNativeZoom —
+      // independent of the zoom being viewed.
+      function latLngFor(ix, iy) {
+        const unit = Math.pow(2, layer.maxNativeZoom);
+        return L.latLng(-iy / unit, ix / unit);
+      }
+
+      function markOpened() {
+        window.__viewer.opened = true;
+        window.__viewer.level = scaleForZoom(map.getZoom());
+      }
+
+      (async function main() {
+        try {
+          // Fetch first so the tile size comes from the service rather than
+          // the plugin's 256 px default, which would build every URL wrongly.
+          const response = await fetch(infoUrl);
+          if (!response.ok) {
+            throw new Error("info.json returned " + response.status);
+          }
+          const info = await response.json();
+          map = L.map("map", {
+            center: [0, 0],
+            crs: L.CRS.Simple,
+            zoom: 0,
+            zoomAnimation: false,
+            fadeAnimation: false,
+            attributionControl: false,
+            zoomControl: false,
+          });
+          layer = L.tileLayer.iiif(infoUrl, {
+            tileSize: info.tiles[0].width,
+            tileFormat: "jpg",
+            // The sweep drives the view; a fit of its own would race the first
+            // one, and max bounds keep pans inside the image.
+            fitBounds: false,
+            setMaxBounds: true,
+            updateWhenIdle: true,
+            keepBuffer: 0,
+          });
+          layer.on("tileload", function () {
+            window.__viewer.loadedCount += 1;
+          });
+          layer.on("tileerror", function (event) {
+            window.__viewer.failed.push({
+              message: "tileerror",
+              url: event.tile ? event.tile.src : null,
+            });
+          });
+          layer.on("load", markOpened);
+          layer.addTo(map);
+          // The plugin fetches and parses info.json itself, and does its own
+          // setup (min/max zoom, max bounds) in a continuation queued on
+          // Promise.all of that same promise. Awaiting the same barrier resumes
+          // after it, so the map's constraints are in place before the harness
+          // starts moving the view. The field is private to the pinned plugin,
+          // so its disappearance is reported instead of raced.
+          if (!layer._infoPromise || !layer._infoPromise.then) {
+            throw new Error(
+              "leaflet-iiif exposes no _infoPromise; its startup changed"
+            );
+          }
+          await Promise.all([layer._infoPromise]);
+          // The plugin keeps info.json's dimensions on the layer itself.
+          window.__viewer.dimensions = [layer.x, layer.y];
+          layerReady = true;
+          // The initial view may request no tiles at all, in which case "load"
+          // never fires; markOpened is idempotent, so either path is fine.
+          markOpened();
+        } catch (error) {
+          window.__viewer.openFailed = String(
+            (error && error.message) || error
+          );
+        }
+      })();
+
+      window.__viewerHome = function () {
+        if (!layerReady) return null;
+        // The whole image, whatever scale factor the caller passed: a home fit
+        // lands on tier 0, which is the level a reader sees first and the
+        // pyramid's coarsest level. The whole image is requested from that
+        // level as a single tile.
+        const bounds = L.latLngBounds(
+          latLngFor(0, layer.y),
+          latLngFor(layer.x, 0)
+        );
+        map.fitBounds(bounds, { animate: false });
+        window.__viewer.level = scaleForZoom(map.getZoom());
+        return window.__viewer.level;
+      };
+
+      window.__viewerFit = function (cell, factor) {
+        if (!layerReady) return null;
+        const [x, y, w, h] = cell;
+        const bounds = L.latLngBounds(
+          latLngFor(x, y + h),
+          latLngFor(x + w, y)
+        );
+        // fitBounds picks the deepest zoom whose bounds fit the viewport, and a
+        // cell of 512 * factor image pixels is exactly 512 screen pixels at
+        // zoom maxNativeZoom - log2(factor). The harness asserts the zoom that
+        // came back maps to the scale factor it asked for, so a wrong
+        // convention fails loudly instead of under-covering.
+        map.fitBounds(bounds, { animate: false });
+        window.__viewer.level = scaleForZoom(map.getZoom());
+        return window.__viewer.level;
+      };
+    </script>
+  </body>
+</html>

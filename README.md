@@ -61,31 +61,59 @@ N.b. because several of the Imagemagick utilities called here already utilize mu
 
 ## Output layout & IIIF versions
 
-`--version` selects the IIIF Image API version that the output tree and its `info.json` target. Both versions are written as **Level 0** static trees: the `info.json` declares `level0` compliance, and the unscaled full-size image is written at the version's canonical location.
+`--version` selects the IIIF Image API version that the output tree and its `info.json` target: `3.0` (the default) or `2.1`. Both are written as **Level 0** static trees: the `info.json` declares `level0` compliance, and the unscaled full-size image is written at the version's canonical location.
 
-For a 2676×1572 source image generated with `--version 3.0` (the default):
+For a 2676×1572 source image generated with `--version 3.0`:
 
 ```
 <output>/
 ├── info.json
 ├── full/
-│   ├── max/0/default.jpg        # unscaled full image: full/max/ for 3.0
-│   ├── 256,150/0/default.jpg    # 3.0 canonical size dirs are w,h
+│   ├── max/0/default.jpg        # unscaled full image
+│   ├── 256,150/0/default.jpg    # declared sizes: aspect-correct thumbnails
 │   ├── 512,301/0/default.jpg
 │   ├── 1024,602/0/default.jpg
-│   └── 2048,1203/0/default.jpg
-└── 0,0,1024,1024/
-    └── 512,/0/default.jpg       # region tiles
+│   ├── 2048,1203/0/default.jpg
+│   └── 335,197/0/default.jpg    # coarsest level: the whole image in one tile
+├── 0,0,512,512/
+│   └── 512,512/0/default.jpg    # native-resolution tile (scale factor 1)
+├── 0,0,1024,1024/
+│   └── 512,512/0/default.jpg    # scale factor 2 tile, 512 px on a side too
+├── 0,0,2048,1572/
+│   └── 512,393/0/default.jpg    # scale factor 4
+└── 0,0,2676,1572/
+    └── 335,197/0/default.jpg    # scale factor 8: one tile, the whole image
 ```
 
-- **Version 3.0** (default): downsized full images live at `full/{w},{h}/0/` (the canonical `w,h` size form of Image API 3.0), and the unscaled full image at `full/max/0/`.
-- **Version 2.1**: downsized full images live at `full/{w},/0/` (2.1's canonical `w,` form for listed sizes), and the unscaled full image at `full/full/0/` (2.1's `full` keyword, renamed `max` in 3.0).
-- **Region tiles** are always served at the `w,` size form (`{x},{y},{w},{h}/{tile},/0/default.jpg`) for both versions. This is a documented deviation from 3.0's canonical `w,h` tile form, matching the reference implementation [zimeon/iiif](https://github.com/zimeon/iiif/blob/master/iiif_static.py) and the size form requested by OpenSeadragon ≥ 1.2.1.
-- **Formats beyond jpg** are declared in `info.json`: 3.0 payloads list them in `extraFormats` (with everything generated in `preferredFormats`), and 2.1 payloads append a `{"formats": [...]}` description object to the `level0` profile URI.
+- **Region tiles** live at `{x},{y},{w},{h}/{size}/0/default.jpg`: the region, then `{size}`, the dimensions the written file actually has. Edge tiles round the scaled dimension up, so a 975 px tall region at scale factor 2 is addressed as `512,488`, not `512,487`.
+- **`sizes`** in `info.json` lists the declared thumbnails as `w,h` pairs, and each of them is written under `full/`.
+- **Scale factors** start at 1 and ascend by powers of two, up to the level where the whole image fits in a single tile. Scale factor 1 is the native-resolution level; each larger factor is a complete coarser level of the pyramid.
+- **The coarsest level is written twice.** At that level the whole image is one tile, and clients name it two ways: the canonical `full/{w},{h}/0/` region, or the explicit `0,0,{W},{H}/{w},{h}/0/` region naming the tile they would have loaded. A static tree cannot redirect one to the other, so both files are written.
+- **Formats beyond jpg** are declared in `info.json`: 3.0 payloads list them in `extraFormats`, with everything the tree serves in `preferredFormats`.
 - **jpg must be included in `--format` for a certifiable tree**: the compliance tables of both Image API 2.1 and 3.0 require jpg support at every compliance level, so a run whose `--format` values exclude jpg produces a tree that no compliance level can certify.
-- **Breaking changes in 0.2.0**: 3.0 trees now write canonical `w,h` size directories (previously `w,`) and gain a `full/max/0/` full-size image; 2.1 payloads changed shape (`@type` is now emitted, and `profile` declares `level0` instead of `level1`, widening to a list when formats beyond jpg are generated). Re-generate existing trees when upgrading.
+
+Version 2.1 trees use their own size-directory and full-size naming and a 2.1-specific `info.json` payload. [CHANGELOG.md](CHANGELOG.md) records those differences and every breaking change to the output contract, including which past releases require regenerating a tree.
 
 Before a release you can spot-check a generated `info.json` against the official IIIF Image API validator at https://iiif.io/api/image/validator/.
+
+## End-to-end tests
+
+The unit suite exercises the generator directly. A separate browser suite in
+[`e2e/`](e2e/README.md) closes the loop: it generates a real tile tree from a
+13 MP fixture, serves it from a local static server, and drives it with three
+independent IIIF clients under Playwright — OpenSeadragon 6.1.1, OpenLayers
+10.11.0 and Leaflet 1.9.4 with leaflet-iiif 3.0.0. Each client walks the whole
+image at every generated scale factor, and the suite asserts that every tile it
+requests is a file the library wrote (and that every file it wrote is
+requested). It runs for both API versions:
+
+```
+uv sync --group e2e
+uv run --group e2e playwright install chromium
+uv run --group e2e pytest e2e
+```
+
+`uv run pytest` on its own still collects only `tests/`.
 
 ## Development
 
@@ -114,7 +142,7 @@ To change a dependency, edit `pyproject.toml` (`dependencies` or a group under
 
 ## Releasing
 
-Bump `version` in `pyproject.toml`, then build and upload:
+Bump `version` in `pyproject.toml`, move `CHANGELOG.md`'s `Unreleased` section under the new version, then build and upload:
 
 ```
 uv build      # sdist + wheel, written to dist/

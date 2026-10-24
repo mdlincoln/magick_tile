@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>magick_tile e2e viewer — OpenSeadragon</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="osd" style="width: 100vw; height: 100vh"></div>
+    <script src="vendor/openseadragon-6.1.1.min.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      // The test harness reads this object instead of reaching into
+      // OpenSeadragon internals, whose shape changes between releases.
+      window.__osd = {
+        opened: false,
+        openFailed: null,
+        loadedCount: 0,
+        failed: [],
+        viewer: null,
+      };
+      const viewer = OpenSeadragon({
+        id: "osd",
+        tileSources: params.get("src"),
+        prefixUrl: "vendor/",
+        showNavigator: false,
+        showNavigationControl: false,
+        blendTime: 0,
+        // Failures must surface instead of being retried away: a retry could
+        // mask a 404 the suite exists to catch.
+        tileRetryMax: 0,
+        crossOriginPolicy: false,
+      });
+      window.__osd.viewer = viewer;
+      viewer.addHandler("open", function () {
+        window.__osd.opened = true;
+      });
+      viewer.addHandler("open-failed", function (event) {
+        window.__osd.openFailed = event.message || String(event);
+      });
+      viewer.addHandler("tile-loaded", function () {
+        window.__osd.loadedCount += 1;
+      });
+      viewer.addHandler("tile-load-failed", function (event) {
+        window.__osd.failed.push({
+          message: event.message,
+          tries: event.tries,
+          maxReached: event.maxReached,
+        });
+      });
+
+      // The uniform viewer contract every backend page exposes, so the harness
+      // reads one shape regardless of library. __osd stays the source of truth.
+      const item = () =>
+        viewer.world ? viewer.world.getItemAt(0) : null;
+      window.__viewer = {
+        get opened() {
+          return window.__osd.opened;
+        },
+        get openFailed() {
+          return window.__osd.openFailed;
+        },
+        get loadedCount() {
+          return window.__osd.loadedCount;
+        },
+        get failed() {
+          return window.__osd.failed;
+        },
+        get idle() {
+          const tiledImage = item();
+          return !!(tiledImage && tiledImage.getFullyLoaded());
+        },
+        get dimensions() {
+          const tiledImage = item();
+          return tiledImage
+            ? [tiledImage.source.dimensions.x, tiledImage.source.dimensions.y]
+            : null;
+        },
+        get level() {
+          const tiledImage = item();
+          const drawn =
+            tiledImage && tiledImage.lastDrawn ? tiledImage.lastDrawn[0] : null;
+          if (!drawn || !drawn.tile) return null;
+          // getLevelScale maps a level index to the fraction of the image's
+          // pixel size it covers, so its reciprocal is the scale factor.
+          const scale = tiledImage.source.getLevelScale(drawn.tile.level);
+          return scale ? 1 / scale : null;
+        },
+      };
+      window.__viewerHome = function () {
+        viewer.viewport.goHome(true);
+      };
+      // Same signature as every other backend page. The scale factor is not
+      // used: OpenSeadragon picks the level for a fitted bounds itself, which
+      // is why the sweep checks the level it drew against the pyramid rather
+      // than against the factor it asked for.
+      window.__viewerFit = function (cell, factor) {
+        const [x, y, w, h] = cell;
+        const tiledImage = item();
+        viewer.viewport.fitBounds(
+          tiledImage.imageToViewportRectangle(x, y, w, h),
+          true
+        );
+      };
+    </script>
+  </body>
+</html>

@@ -8,3 +8,12 @@ magick_tile.egg-info
 __pycache__
 .pytest_cache
 .coverage
+
+# The e2e fixture is committed despite the global image rules above.
+!e2e/fixtures/*.jpg
+
+# Browser-harness artifacts.
+e2e/.cache/
+test-results/
+playwright-report/
+.playwright-mcp/

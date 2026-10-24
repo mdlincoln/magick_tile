@@ -18,7 +18,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --locked
+        # The e2e group is installed for its types alone: the pre-commit step
+        # below type-checks e2e/, and ty cannot resolve `playwright` without it.
+        # Browser binaries are the slow part and stay in the e2e job;
+        # `testpaths` keeps the pytest step below unit-only either way.
+        run: uv sync --locked --group e2e
       - name: pre-commit (ruff + ty)
         run: uv run pre-commit run --all-files --show-diff-on-failure
       - name: Pytest
@@ -30,3 +34,29 @@ jobs:
         with:
           pytest-coverage-path: ./pytest-coverage.txt
           junitxml-path: ./pytest.xml
+
+  # Browser suite: generates a real tile tree and checks it through three IIIF
+  # clients (OpenSeadragon, OpenLayers, leaflet-iiif) in Chromium — six sweeps,
+  # one per API version and backend. Kept separate so the unit job stays fast.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup ImageMagick
+        run: sudo apt-get install -y imagemagick
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: '3.10'
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked --group e2e
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('uv.lock') }}
+      - name: Install Chromium
+        run: uv run --group e2e playwright install --with-deps chromium
+      - name: E2E
+        run: uv run --group e2e pytest e2e -v

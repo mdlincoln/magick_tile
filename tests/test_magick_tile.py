@@ -1,10 +1,20 @@
 import json
+import subprocess
+from math import ceil
 from pathlib import Path
 
 import pytest
 
 from pytest_subprocess import FakeProcess
-from magick_tile.generator import SourceImage, Tile, DownsizedVersion
+from magick_tile.generator import (
+    DownsizedVersion,
+    SourceImage,
+    Tile,
+    declared_size_segments,
+    scaling_factors_for,
+    whole_image_segment,
+    whole_image_size,
+)
 from magick_tile.manifest import IIIFManifest, IIIFManifest_3_0, TileScale, TileSize
 from magick_tile.settings import IIIFFormats, IIIFVersions
 
@@ -16,6 +26,114 @@ EXPECTED_SIZES = [
     {"width": 1024, "height": 602},
     {"width": 2048, "height": 1203},
 ]
+
+
+def pixel_dimensions(path: Path) -> tuple[int, int]:
+    """Measure a file with imagemagick's identify, independently of the
+    library under test."""
+    written = subprocess.run(
+        ["identify", "-format", "%w %h", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    return int(written[0]), int(written[1])
+
+
+class TestScalingFactors:
+    """The pyramid's level list, checked without ImageMagick or an asset.
+
+    Each row asserts both directions: the top level covers the whole image in
+    one tile, and the level below it does not. An image at or below one tile has
+    no level below, so its criterion is that the list is exactly [1].
+    """
+
+    @pytest.mark.parametrize(
+        "width, height, expected",
+        [
+            (3202, 4096, [1, 2, 4, 8]),  # e2e fixture: longer side exactly 8 tiles
+            (2676, 1572, [1, 2, 4, 8]),
+            (4096, 2048, [1, 2, 4, 8]),  # elongated: would otherwise stop at 2
+            (400, 3200, [1, 2, 4, 8]),  # tall
+            (2048, 2048, [1, 2, 4]),
+            (1024, 1024, [1, 2]),
+            (600, 400, [1, 2]),
+            (900, 200, [1, 2]),  # wide
+            (512, 512, [1]),
+            (300, 200, [1]),
+            (256, 256, [1]),
+        ],
+    )
+    def test_scaling_factors_for_dimensions(
+        self, width: int, height: int, expected: list[int]
+    ) -> None:
+        tile_size = 512
+        factors = scaling_factors_for(width, height, tile_size)
+        assert factors == expected
+        assert factors == [1 << exponent for exponent in range(len(factors))]
+
+        top = factors[-1]
+        assert top * tile_size >= max(width, height)
+        if len(factors) > 1:
+            assert (top // 2) * tile_size < max(width, height)
+
+
+class TestWholeImageArithmetic:
+    """The coarsest level's size and its collision rule.
+
+    The collision cannot be reproduced from the repository's images — neither
+    the unit asset (2676x1572) nor the e2e fixture (3202x4096) gives a coarsest
+    width that is also a declared width — so it is pinned arithmetically here
+    and executed through ImageMagick in
+    ``TestImageProcess.test_whole_image_level_skips_a_declared_size_end_to_end``.
+    """
+
+    @pytest.mark.parametrize(
+        "width, height, expected",
+        [
+            # 4096 / 8 = 512 exactly; half-up would wrongly give 513.
+            (3202, 4096, (401, 512)),
+            (2676, 1572, (335, 197)),
+            (4096, 3011, (512, 377)),
+            (512, 512, (512, 512)),
+        ],
+    )
+    def test_whole_image_size(
+        self, width: int, height: int, expected: tuple[int, int]
+    ) -> None:
+        assert whole_image_size(width, height, 512) == expected
+
+    def test_whole_image_level_yields_to_a_declared_size(self) -> None:
+        declared_widths = [256, 512, 1024, 2048]
+
+        # 2.1's size segment is width-only, so the coarsest level of a
+        # 4096x3011 image and the declared size 512 share a directory while
+        # disagreeing about the height. The declared file must keep its own.
+        two_one_declared = declared_size_segments(
+            IIIFVersions._2_1, 4096, 3011, declared_widths
+        )
+        assert "512," in two_one_declared
+        assert whole_image_segment(4096, 3011, 512, IIIFVersions._2_1) in (
+            two_one_declared
+        )
+
+        # 3.0's segment carries the height, so 512,377 is a directory of its
+        # own and has to be written even though 512,376 is declared.
+        three_oh_declared = declared_size_segments(
+            IIIFVersions._3_0, 4096, 3011, declared_widths
+        )
+        assert "512,376" in three_oh_declared
+        assert whole_image_segment(4096, 3011, 512, IIIFVersions._3_0) == "512,377"
+        assert whole_image_segment(4096, 3011, 512, IIIFVersions._3_0) not in (
+            three_oh_declared
+        )
+
+        # A 4096x2048 image's coarsest level is exactly the declared size 512
+        # in 3.0, at the same geometry: a benign collision, still skipped.
+        assert whole_image_segment(4096, 2048, 512, IIIFVersions._3_0) == "512,256"
+        assert whole_image_segment(4096, 2048, 512, IIIFVersions._3_0) in (
+            declared_size_segments(IIIFVersions._3_0, 4096, 2048, declared_widths)
+        )
 
 
 @pytest.fixture
@@ -138,14 +256,11 @@ class TestSourceImage:
         assert example_jpg_image.format == "jpg"
         assert example_png_image.format == "png"
 
-    def test_minimum_dimension(self, example_jpg_image: SourceImage):
-        assert example_jpg_image.minimum_dimension == 1572
-
     def test_downsizing_levels(self, example_jpg_image: SourceImage):
         assert example_jpg_image.downsizing_levels == [256, 512, 1024, 2048]
 
     def test_scaling_factors(self, example_jpg_image: SourceImage):
-        assert example_jpg_image.scaling_factors == [2]
+        assert example_jpg_image.scaling_factors == [1, 2, 4, 8]
 
     def test_downsized_height(self, example_jpg_image: SourceImage):
         assert [
@@ -166,7 +281,7 @@ class TestSourceImage:
             "height": 1572,
             "preferredFormats": ["jpg"],
             "sizes": EXPECTED_SIZES,
-            "tiles": [{"width": 512, "scaleFactors": [2]}],
+            "tiles": [{"width": 512, "scaleFactors": [1, 2, 4, 8]}],
         }
 
 
@@ -175,14 +290,11 @@ class TestPngImage:
         assert example_png_image.dimensions.width == 2676
         assert example_png_image.dimensions.height == 1572
 
-    def test_minimum_dimension(self, example_png_image: SourceImage):
-        assert example_png_image.minimum_dimension == 1572
-
     def test_downsizing_levels(self, example_png_image: SourceImage):
         assert example_png_image.downsizing_levels == [256, 512, 1024, 2048]
 
     def test_scaling_factors(self, example_png_image: SourceImage):
-        assert example_png_image.scaling_factors == [2]
+        assert example_png_image.scaling_factors == [1, 2, 4, 8]
 
     def test_manifest(self, example_png_image: SourceImage):
         assert example_png_image.manifest.model_dump(
@@ -198,7 +310,7 @@ class TestPngImage:
             "preferredFormats": ["jpg", "png"],
             "extraFormats": ["png"],
             "sizes": EXPECTED_SIZES,
-            "tiles": [{"width": 512, "scaleFactors": [2]}],
+            "tiles": [{"width": 512, "scaleFactors": [1, 2, 4, 8]}],
         }
 
 
@@ -283,12 +395,14 @@ class TestTile:
         assert example_tile.file_h == 256
 
     def test_target_dir(self, example_tile: Tile, test_output_dir: Path):
-        assert example_tile.target_dir == test_output_dir / "0,0,512,512" / "256," / "0"
+        assert (
+            example_tile.target_dir == test_output_dir / "0,0,512,512" / "256,256" / "0"
+        )
 
     def test_target_file(self, example_tile: Tile, test_output_dir: Path):
         assert (
             example_tile.target_file
-            == test_output_dir / "0,0,512,512" / "256," / "0" / "default.jpg"
+            == test_output_dir / "0,0,512,512" / "256,256" / "0" / "default.jpg"
         )
 
     def test_resize(self, example_tile: Tile):
@@ -296,6 +410,68 @@ class TestTile:
         assert not target_file.exists()
         example_tile.resize()
         assert target_file.exists()
+
+
+class TestRegionTileSizeSegment:
+    def test_region_tile_size_segment_is_version_correct(
+        self,
+        example_jpg_image: SourceImage,
+        example_2_1_image: SourceImage,
+        test_working_dir: Path,
+    ):
+        # 1000x600 region scaled by 2 writes a 500x300 file. 3.0 addresses it as
+        # w,h; 2.1 addresses it as w,.
+        original_path = test_working_dir / "1024,2,0,0,1000,600.jpg"
+        three_oh = Tile(original_path=original_path, source_image=example_jpg_image)
+        two_one = Tile(original_path=original_path, source_image=example_2_1_image)
+        assert three_oh.size_path_segment == "500,300"
+        assert two_one.size_path_segment == "500,"
+        assert three_oh.target_dir == (
+            example_jpg_image.target_dir / "0,0,1000,600" / "500,300" / "0"
+        )
+        assert two_one.target_dir == (
+            example_2_1_image.target_dir / "0,0,1000,600" / "500," / "0"
+        )
+
+    def test_edge_tile_height_rounds_up(
+        self, example_jpg_image: SourceImage, test_working_dir: Path
+    ):
+        # 975 / 2 = 487.5. Clients request the scaled edge height rounded up, so
+        # the file has to be addressed as 488.
+        original_path = test_working_dir / "1024,2,0,0,1024,975.jpg"
+        edge_tile = Tile(original_path=original_path, source_image=example_jpg_image)
+        assert edge_tile.file_h == 488
+        assert edge_tile.size_path_segment == "512,488"
+
+    def test_resize_writes_declared_dimensions(self, test_working_dir: Path):
+        """The written file's pixels match the size directory that addresses
+        it, even when the scaled dimensions do not share the region's aspect
+        ratio."""
+        source = SourceImage(
+            id="https://example.com/test.jpg",
+            path=test_working_dir / "source.jpg",
+            tile_size=512,
+            target_dir=test_working_dir / "out",
+            working_dir=test_working_dir,
+        )
+        # 245x184 at scale factor 4 lies between 61x46 and 62x46, so an
+        # aspect-preserving resize would write 61x46 into a 62,46 directory.
+        original_path = test_working_dir / "245,4,0,0,245,184.jpg"
+        subprocess.run(
+            ["convert", "-size", "245x184", "xc:white", str(original_path)],
+            check=True,
+            capture_output=True,
+        )
+        tile = Tile(original_path=original_path, source_image=source)
+        assert tile.size_path_segment == "62,46"
+        tile.resize()
+        written = subprocess.run(
+            ["identify", "-format", "%w %h", str(tile.target_file)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split()
+        assert tuple(int(value) for value in written) == (62, 46)
 
 
 class TestDownsizedVersion:
@@ -369,6 +545,21 @@ class TestImageProcess:
         example_jpg_image.generate_tile_files()
         assert (test_working_dir / "1024,2,0,0,1024,1024.jpg").exists()
 
+    def test_tiles_are_not_duplicated_across_scale_factors(
+        self, example_jpg_image: SourceImage
+    ):
+        dims = example_jpg_image.dimensions
+        example_jpg_image.generate_tile_files()
+        tile_size = example_jpg_image.tile_size
+        expected = sum(
+            ceil(dims.width / (tile_size * sf)) * ceil(dims.height / (tile_size * sf))
+            for sf in example_jpg_image.scaling_factors
+        )
+        # Every level's crops are collected once: an unscoped glob in the
+        # working directory would re-add earlier levels' tiles.
+        assert len({t.original_path for t in example_jpg_image.tiles}) == expected
+        assert len(example_jpg_image.tiles) == expected
+
     def test_resize_tile_files(
         self,
         example_jpg_image: SourceImage,
@@ -380,7 +571,7 @@ class TestImageProcess:
         example_jpg_image.resize_tile_files()
         assert len(list(test_output_dir.glob("*"))) > 0
         assert (
-            test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
+            test_output_dir / "0,0,1024,1024" / "512,512" / "0" / "default.jpg"
         ).exists()
 
     def test_generate_reduced_versions(
@@ -397,6 +588,108 @@ class TestImageProcess:
         assert len(list(test_output_dir.glob("*"))) == 0
         example_jpg_image.generate_full_size()
         assert (test_output_dir / "full" / "max" / "0" / "default.jpg").exists()
+
+    def test_generate_whole_image_level(
+        self, example_jpg_image: SourceImage, test_output_dir: Path
+    ):
+        """The coarsest level of the 2676x1572 asset is 335x197: the `full`
+        spelling of the level's single whole-image tile."""
+        assert len(list(test_output_dir.glob("*"))) == 0
+        example_jpg_image.generate_whole_image_level()
+        target = test_output_dir / "full" / "335,197" / "0" / "default.jpg"
+        assert target.exists()
+        assert pixel_dimensions(target) == (335, 197)
+
+    def test_generate_whole_image_level_2_1(
+        self, example_2_1_image: SourceImage, test_output_dir: Path
+    ):
+        assert len(list(test_output_dir.glob("*"))) == 0
+        example_2_1_image.generate_whole_image_level()
+        target = test_output_dir / "full" / "335," / "0" / "default.jpg"
+        assert target.exists()
+        assert pixel_dimensions(target) == (335, 197)
+
+    def test_whole_image_level_skips_a_declared_size_end_to_end(
+        self, test_working_dir: Path
+    ):
+        """A colliding segment leaves the declared file at its declared size.
+
+        4096x3011 at tile 512 has a coarsest level of 512x377, while 2.1's
+        width-only declared size 512 is 512x376 — the same directory. The
+        declared pass runs first, so the skip is what keeps its dimensions.
+        """
+        source = self._colliding_source(test_working_dir, IIIFVersions._2_1)
+
+        source.generate_reduced_versions()
+        declared = test_working_dir / "out" / "full" / "512," / "0" / "default.jpg"
+        assert declared.exists()
+        assert pixel_dimensions(declared) == (512, 376)
+
+        source.generate_whole_image_level()
+        assert pixel_dimensions(declared) == (512, 376)
+
+    def test_whole_image_level_is_written_beside_a_same_width_declared_size(
+        self, test_working_dir: Path
+    ):
+        """3.0's segment carries the height, so the same-image collision is not
+        one: 512,377 is a directory of its own and has to be written next to the
+        declared 512,376. A skip keyed on the width alone would drop a file two
+        clients request."""
+        source = self._colliding_source(test_working_dir, IIIFVersions._3_0)
+
+        source.generate_reduced_versions()
+        declared = test_working_dir / "out" / "full" / "512,376" / "0" / "default.jpg"
+        assert pixel_dimensions(declared) == (512, 376)
+
+        source.generate_whole_image_level()
+        level = test_working_dir / "out" / "full" / "512,377" / "0" / "default.jpg"
+        assert level.exists()
+        assert pixel_dimensions(level) == (512, 377)
+        # The declared thumbnail is untouched by the extra write.
+        assert pixel_dimensions(declared) == (512, 376)
+
+    def test_collision_leaves_the_region_spelling_at_the_levels_size(
+        self, test_working_dir: Path
+    ):
+        """The documented consequence of skipping in 2.1: the tile pipeline still
+        writes the whole image at the level's own size, so the explicit-region
+        client gets 512x377 while the width-only `full` directory keeps the
+        declared 512x376."""
+        source = self._colliding_source(test_working_dir, IIIFVersions._2_1)
+        source.generate_reduced_versions()
+        source.generate_tile_files()
+        source.resize_tile_files()
+        source.generate_whole_image_level()
+
+        region = (
+            test_working_dir / "out" / "0,0,4096,3011" / "512," / "0" / "default.jpg"
+        )
+        assert region.exists()
+        assert pixel_dimensions(region) == (512, 377)
+        assert pixel_dimensions(
+            test_working_dir / "out" / "full" / "512," / "0" / "default.jpg"
+        ) == (512, 376)
+
+    @staticmethod
+    def _colliding_source(test_working_dir: Path, version: IIIFVersions) -> SourceImage:
+        """A 4096x3011 white source at tile 512, whose coarsest level is 512x377
+        and whose declared size 512 is 512x376."""
+        source_path = test_working_dir / "source.jpg"
+        subprocess.run(
+            ["convert", "-size", "4096x3011", "xc:white", str(source_path)],
+            check=True,
+            capture_output=True,
+        )
+        source = SourceImage(
+            id="https://example.com/test.jpg",
+            path=source_path,
+            tile_size=512,
+            target_dir=test_working_dir / "out",
+            working_dir=test_working_dir,
+            version=version,
+        )
+        assert source.whole_image_level_size == (512, 377)
+        return source
 
 
 class TestMultiFormatProcess:
@@ -422,10 +715,10 @@ class TestMultiFormatProcess:
         example_png_image.resize_tile_files()
         assert len(list(test_output_dir.glob("*"))) > 0
         assert (
-            test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
+            test_output_dir / "0,0,1024,1024" / "512,512" / "0" / "default.jpg"
         ).exists()
         assert (
-            test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.png"
+            test_output_dir / "0,0,1024,1024" / "512,512" / "0" / "default.png"
         ).exists()
 
     def test_generate_reduced_versions(
@@ -461,8 +754,14 @@ class TestCompleteOutput:
         assert info_file_path.exists()
         assert (test_output_dir / "full" / "1024,602" / "0" / "default.jpg").exists()
         assert (test_output_dir / "full" / "max" / "0" / "default.jpg").exists()
+        # The coarsest level, under both spellings: region tile from the tile
+        # pipeline, `full` derivative from the whole-image writer.
+        assert (test_output_dir / "full" / "335,197" / "0" / "default.jpg").exists()
         assert (
-            test_output_dir / "0,0,1024,1024" / "512," / "0" / "default.jpg"
+            test_output_dir / "0,0,2676,1572" / "335,197" / "0" / "default.jpg"
+        ).exists()
+        assert (
+            test_output_dir / "0,0,1024,1024" / "512,512" / "0" / "default.jpg"
         ).exists()
 
 
