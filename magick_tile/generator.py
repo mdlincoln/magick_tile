@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 import re
 import subprocess
-from math import floor, ceil
+from math import ceil
 from tempfile import mkdtemp
 from pathlib import Path
 from itertools import product
@@ -34,10 +34,6 @@ from magick_tile.manifest import (
 class Dimensions(BaseModel):
     width: int
     height: int
-
-    @property
-    def smaller(self) -> int:
-        return min(self.width, self.height)
 
 
 class Tile(BaseModel):
@@ -84,9 +80,23 @@ class Tile(BaseModel):
     @property
     def file_h(self) -> int:
         return (
-            floor(self.h / self.sf)
+            # Rounds up like file_w: a scaled edge height is usually fractional,
+            # and clients compute the requested height as ceil(h / sf).
+            ceil(self.h / self.sf)
             if self.h < self.source_image.tile_size * self.sf
             else self.source_image.tile_size
+        )
+
+    @property
+    def size_path_segment(self) -> str:
+        """Size directory in the canonical form for the configured version.
+
+        Image API 3.0 §4.8 gives canonical tile sizes as w,h; 2.1 §5.2 uses w,.
+        Clients build the request from these forms, so a mismatch means the
+        file on disk is never asked for.
+        """
+        return SIZE_SEGMENT_BY_VERSION[self.source_image.version].format(
+            w=self.file_w, h=self.file_h
         )
 
     @property
@@ -94,7 +104,8 @@ class Tile(BaseModel):
         return (
             self.source_image.target_dir
             / f"{self.x},{self.y},{self.w},{self.h}"
-            / f"{self.file_w},/0"
+            / self.size_path_segment
+            / "0"
         )
 
     @property
@@ -110,7 +121,10 @@ class Tile(BaseModel):
             "convert",
             self.original_path,
             "-resize",
-            f"{self.file_w}x{self.file_h}",
+            # Force the exact dimensions the size directory declares. Plain
+            # -resize preserves the source aspect ratio, which for an edge tile
+            # can land a pixel away from ceil(w / sf) by ceil(h / sf).
+            f"{self.file_w}x{self.file_h}!",
             self.target_file,
         ]
         logging.debug(f"Resize command: {cmd}")
@@ -128,6 +142,16 @@ def tempdir_path() -> Path:
 FULL_SIZE_BY_VERSION: dict[IIIFVersions, IIIFFullSize] = {
     IIIFVersions._2_1: IIIFFullSize._2,
     IIIFVersions._3_0: IIIFFullSize._3,
+}
+
+# Canonical size-directory form for the configured version, holding a width as
+# {w} and a height as {h}. Image API 3.0 §4.8 addresses a size as w,h; 2.1 §5.2
+# addresses it as w,. The library needs this mapping for region tiles, for the
+# declared sizes and for the coarsest level's whole-image derivative, so it
+# lives here once rather than inline at each of those uses.
+SIZE_SEGMENT_BY_VERSION: dict[IIIFVersions, str] = {
+    IIIFVersions._3_0: "{w},{h}",
+    IIIFVersions._2_1: "{w},",
 }
 
 
@@ -148,9 +172,9 @@ class DownsizedVersion(BaseModel):
         Image API 3.0 §4.8 gives canonical listed sizes as w,h, while 2.1 §5.2
         directs clients to request listed sizes as w,.
         """
-        if self.source_image.version is IIIFVersions._2_1:
-            return f"{self.downsize_width},"
-        return f"{self.downsize_width},{self.downsize_height}"
+        return SIZE_SEGMENT_BY_VERSION[self.source_image.version].format(
+            w=self.downsize_width, h=self.downsize_height
+        )
 
     @property
     def target_directory(self) -> Path:
@@ -176,6 +200,71 @@ class DownsizedVersion(BaseModel):
             stdout=subprocess.PIPE,
             check=True,
         )
+
+
+def scaling_factors_for(width: int, height: int, tile_size: int) -> list[int]:
+    """Powers of two from 1 up to the level that fits the whole image in one tile.
+
+    The top level is derived from the longer side, so `2 ** M * tile_size` is
+    the first level at or above `max(width, height)`. Integer arithmetic only:
+    a `log2` would let the result drift from `2 ** M` through float rounding,
+    and the boundary case (`top * tile_size == max(width, height)` exactly) is a
+    real one — a 4096 px side at tile 512 must stop at 8, not 16.
+    """
+    top = 1
+    while top * tile_size < max(width, height):
+        top *= 2
+    return [1 << exponent for exponent in range(top.bit_length())]
+
+
+def whole_image_size(width: int, height: int, tile_size: int) -> tuple[int, int]:
+    """Pixel size of the coarsest level's single tile.
+
+    Both dimensions round up, matching how a client computes the size of a
+    whole-image region at that scale factor. Note this is not the aspect-correct
+    half-up rule `downsized_height_for` applies: for 3202x4096 at scale 8 the
+    client asks for 512, while half-up would give 513.
+    """
+    top = max(scaling_factors_for(width, height, tile_size))
+    return ceil(width / top), ceil(height / top)
+
+
+def downsized_widths_for(width: int) -> list[int]:
+    """Declared `sizes` widths for an image of this width.
+
+    Every width is a power of two below the image's own width, so the largest
+    reduced image is always smaller than the original.
+    """
+    downsized_widths: list[int] = []
+    current_factor: int = settings.MINIMUMUM_DOWNSIZE_EXP
+    while (2**current_factor) < width:
+        downsized_widths.append(2**current_factor)
+        current_factor += 1
+    return downsized_widths
+
+
+def downsized_height_for(width: int, height: int, downsize_width: int) -> int:
+    """Aspect-correct height for one declared width, rounded half up."""
+    return int(downsize_width * height / width + 0.5)
+
+
+def declared_size_segments(
+    version: IIIFVersions, width: int, height: int, downsize_widths: list[int]
+) -> set[str]:
+    """Size directories the declared `sizes` pass writes, in this version's form."""
+    form = SIZE_SEGMENT_BY_VERSION[version]
+    return {
+        form.format(w=ds, h=downsized_height_for(width, height, ds))
+        for ds in downsize_widths
+    }
+
+
+def whole_image_segment(
+    width: int, height: int, tile_size: int, version: IIIFVersions
+) -> str:
+    """Size directory for the coarsest level's whole-image derivative."""
+    w, h = whole_image_size(width, height, tile_size)
+    return SIZE_SEGMENT_BY_VERSION[version].format(w=w, h=h)
 
 
 class SourceImage(BaseModel):
@@ -216,41 +305,43 @@ class SourceImage(BaseModel):
         return IIIFFormats[self.path.suffix.lstrip(".")]
 
     @property
-    def minimum_dimension(self) -> int:
-        return self.dimensions.smaller
-
-    @property
     def downsizing_levels(self) -> list[int]:
         """
         Compute downsizing levels such that the width of the largest reduced
         image is smaller than the width of the original image
         """
-        downsized_widths: list[int] = []
-        current_factor: int = settings.MINIMUMUM_DOWNSIZE_EXP
-        while (2**current_factor) < self.dimensions.width:
-            downsized_widths.append(2**current_factor)
-            current_factor += 1
-        return downsized_widths
+        return downsized_widths_for(self.dimensions.width)
 
     @property
     def scaling_factors(self) -> list[int]:
         """
-        Compute scaling factors such that the largest tile made is smaller
-        than the shorter dimension of the input image
+        Compute scaling factors such that the coarsest level is the level where
+        the whole image fits in a single tile.
+
+        That top level is sized from the longer side: at `2 ** M` the whole
+        image fits one tile, which is the tier-0 scale of clients that count
+        tiers from the image dimensions and the tile size instead of reading
+        `scaleFactors`. Sizing from the shorter side instead stops one level
+        short of it, so those clients ask for a level that was never written.
+
+        The list starts at 1 and ascends by powers of two. Viewers derive the
+        whole pyramid from its largest entry and assume it descends by two down
+        to native resolution, so a pyramid that starts at 2 leaves them
+        requesting tiles that were never written.
         """
-        scaling_widths: list[int] = []
-        current_scaling_factor = 1
-        while (2**current_scaling_factor) < ceil(
-            self.minimum_dimension / self.tile_size
-        ):
-            scaling_widths.append(2**current_scaling_factor)
-            current_scaling_factor += 1
-        return scaling_widths
+        dims = self.dimensions
+        return scaling_factors_for(dims.width, dims.height, self.tile_size)
+
+    @property
+    def whole_image_level_size(self) -> tuple[int, int]:
+        """Pixel size of the coarsest level's single whole-image tile."""
+        dims = self.dimensions
+        return whole_image_size(dims.width, dims.height, self.tile_size)
 
     def downsized_height(self, downsize_width: int) -> int:
         """Aspect-correct height for a downsized width, rounded half up."""
         dims = self.dimensions
-        return int(downsize_width * dims.height / dims.width + 0.5)
+        return downsized_height_for(dims.width, dims.height, downsize_width)
 
     def reject_size_constraints(self) -> None:
         """
@@ -301,8 +392,10 @@ class SourceImage(BaseModel):
 
             # Imagemagick will create many files from this single command.
             # Collect the filenames and parse them so that we have the
-            # necessary info for the final step of the conversion.
-            generated_paths = self.working_dir.glob(f"*.{img_format}")
+            # necessary info for the final step of the conversion. The glob is
+            # scoped to this crop size: an unscoped match would pick up every
+            # earlier level's tiles too and resize them again.
+            generated_paths = self.working_dir.glob(f"{cropsize},{sf},*.{img_format}")
             for gp in generated_paths:
                 self.tiles.append(Tile(original_path=gp, source_image=self))
 
@@ -344,6 +437,69 @@ class SourceImage(BaseModel):
                 # info.json's width and height.
                 f"{dims.width}x{dims.height}!",
                 full_size_dir / f"default.{img_format.value}",
+            ]
+            subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+
+    def generate_whole_image_level(self) -> None:
+        """
+        Write the coarsest level's whole-image derivative.
+
+        Once the pyramid's top level is the level where the whole image fits in
+        one tile, every client requests that level as a whole-image region. They
+        do not agree on how to spell it. OpenSeadragon and OpenLayers rewrite a
+        whole-image tile region to the canonical `full` region and send the size
+        only (`full/{w},{h}/0/`), while leaflet-iiif sends the explicit region
+        of the tile it would have loaded (`0,0,{W},{H}/{w},{h}/0/`). A dynamic
+        IIIF server redirects the explicit region to `full`, because that is the
+        canonical form for the whole image in both API versions; a static tree
+        cannot redirect, so it writes both paths. The tile pipeline already
+        writes the region spelling, so this method writes the `full` one.
+
+        A skip covers the one case where those two spellings collide with a
+        declared size. 2.1's size segment is width-only, so for 4096x3011 at
+        tile 512 the level's segment is `512,` and the declared size 512's
+        segment is `512,` too — one directory, two heights: the level is 512x377
+        and the thumbnail is 512x376. Overwriting the thumbnail would break the
+        declared dimensions, so the declared file stays as it is: the URL still
+        resolves, and a width-only segment makes no height promise to the client.
+        3.0's segment carries the height, so a collision there means the declared
+        file already has the level's dimensions and skipping only avoids writing
+        the same file twice.
+
+        The disagreement a skip leaves in a 2.1 tree is small by construction: a
+        colliding coarsest width is at most one tile, while the declared widths
+        are the powers of two from 256 upwards, and the two rules round the same
+        aspect ratio differently — by a pixel or two, in either direction.
+
+        This assumes the declared sizes were written, as `convert()` does before
+        calling it; called standalone on a colliding shape it writes nothing. An
+        image at or below one tile is written like any other, which duplicates
+        `full/max` (or `full/full`) at small sizes: one duplicate file buys
+        uniform behaviour and keeps the small-image path exercised.
+        """
+        self.reject_size_constraints()
+        dims = self.dimensions
+        whole_width, whole_height = whole_image_size(
+            dims.width, dims.height, self.tile_size
+        )
+        segment = whole_image_segment(
+            dims.width, dims.height, self.tile_size, self.version
+        )
+        if segment in declared_size_segments(
+            self.version, dims.width, dims.height, self.downsizing_levels
+        ):
+            return
+        target_directory = self.target_dir / "full" / segment / "0"
+        target_directory.mkdir(parents=True, exist_ok=True)
+        for img_format in self.formats:
+            cmd: list[str | Path] = [
+                "convert",
+                self.path,
+                "-geometry",
+                # Force exact pixel dimensions so the file matches the size
+                # directory that addresses it, as the declared sizes do.
+                f"{whole_width}x{whole_height}!",
+                target_directory / f"default.{img_format.value}",
             ]
             subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
 
@@ -406,7 +562,7 @@ class SourceImage(BaseModel):
 
     def convert(self) -> None:
         """
-        Five-stage generation:
+        Six-stage generation:
 
         1. Use convert's -crop function to write tilesets at each of the
         scaling factors appropriate for the image (e.g. tiles at 256, 512,
@@ -433,7 +589,12 @@ class SourceImage(BaseModel):
         """
         self.generate_full_size()
         """
-        5. Write the IIIF image information JSON file
+        5. Write the coarsest level's whole-image derivative at its `full` URI,
+        the spelling the clients that canonicalize a whole-image region send.
+        """
+        self.generate_whole_image_level()
+        """
+        6. Write the IIIF image information JSON file
         """
         self.write_info()
 

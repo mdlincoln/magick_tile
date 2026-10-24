@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>magick_tile e2e viewer — OpenLayers</title>
+    <link rel="stylesheet" href="vendor/ol-10.11.0.css" />
+    <style>
+      html,
+      body,
+      #map {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script src="vendor/ol-10.11.0.js"></script>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const infoUrl = params.get("src");
+
+      // The uniform viewer contract every backend page exposes, so the harness
+      // reads one shape regardless of library.
+      window.__viewer = {
+        opened: false,
+        openFailed: null,
+        loadedCount: 0,
+        failed: [],
+        dimensions: null,
+        level: null,
+        // Every tile load start/end pair moves the current source's counter, so
+        // an empty count means this view has finished fetching.
+        get idle() {
+          return inFlight.pending === 0;
+        },
+      };
+
+      let options = null;
+      let map = null;
+      let view = null;
+      let layer = null;
+      let source = null;
+      let currentFactor = null;
+      // Tiles in flight for the current source only. Each source closes over
+      // its own counter: a discarded source's late load events must not move
+      // the count of the view that replaced it, which is what a single shared
+      // counter would do.
+      let inFlight = { pending: 0 };
+
+      // Every source is built here so every source reports: a source created
+      // without listeners emits nothing, which would leave the page looking
+      // idle after each fit and hide every coverage gap.
+      function buildSource() {
+        const next = new ol.source.IIIF(options);
+        const counter = { pending: 0 };
+        next.on("tileloadstart", function () {
+          counter.pending += 1;
+        });
+        next.on("tileloadend", function () {
+          counter.pending = Math.max(0, counter.pending - 1);
+          window.__viewer.loadedCount += 1;
+        });
+        next.on("tileloaderror", function () {
+          // Failures are diagnosed from the server's access log, which knows
+          // the URL; the page only has to say that this view is done loading.
+          counter.pending = Math.max(0, counter.pending - 1);
+          window.__viewer.failed.push({ message: "tileloaderror" });
+        });
+        // OpenLayers 10 dispatches no abort event; a load abandoned with its
+        // source stops mattering because that source's counter is never read.
+        return { source: next, counter: counter };
+      }
+
+      function useSource(built) {
+        source = built.source;
+        inFlight = built.counter;
+        if (layer) layer.setSource(source);
+        return source;
+      }
+
+      (async function main() {
+        try {
+          const response = await fetch(infoUrl);
+          if (!response.ok) {
+            throw new Error("info.json returned " + response.status);
+          }
+          const info = await response.json();
+          options = new ol.format.IIIFInfo(info).getTileSourceOptions();
+          if (!options) {
+            throw new Error("info.json is not a supported IIIF image service");
+          }
+          useSource(buildSource());
+          const tileGrid = source.getTileGrid();
+          // IIIF sources build their grid over an extent of
+          // [0, -height, width, 0], with the origin at the top left.
+          const extent = tileGrid.getExtent();
+          window.__viewer.dimensions = [extent[2] - extent[0], -extent[1]];
+          const resolutions = tileGrid.getResolutions();
+          view = new ol.View({
+            center: ol.extent.getCenter(extent),
+            // Coarsest declared level first: the same view OpenSeadragon
+            // reaches through goHome().
+            resolution: resolutions[0],
+            resolutions: resolutions,
+            extent: extent,
+            constrainOnlyCenter: true,
+          });
+          layer = new ol.layer.Tile({ source: source });
+          map = new ol.Map({ target: "map", layers: [layer], view: view });
+          map.once("postrender", function () {
+            window.__viewer.level = view.getResolution();
+            window.__viewer.opened = true;
+          });
+        } catch (error) {
+          window.__viewer.openFailed = String(
+            (error && error.message) || error
+          );
+        }
+      })();
+
+      // A fresh source has an empty tile cache, so a new scale factor genuinely
+      // refetches its tiles instead of serving them from the previous fit's
+      // cache. Zooming to a resolution the cache already covers would make the
+      // coverage sweep pass without asking the server for anything.
+      function prepare(factor) {
+        if (map === null || view === null) return false;
+        if (currentFactor !== factor) {
+          useSource(buildSource());
+          currentFactor = factor;
+        }
+        return true;
+      }
+
+      window.__viewerHome = function (factor) {
+        if (!prepare(factor)) return null;
+        const extent = source.getTileGrid().getExtent();
+        view.setCenter(ol.extent.getCenter(extent));
+        view.setResolution(factor);
+        window.__viewer.level = view.getResolution();
+        return window.__viewer.level;
+      };
+
+      window.__viewerFit = function (cell, factor) {
+        if (!prepare(factor)) return null;
+        const [x, y, w, h] = cell;
+        // Image pixel coordinates map to grid coordinates with y negated, so a
+        // cell centred on (x + w/2, y + h/2) is centred on (x + w/2, -(y + h/2)).
+        view.setCenter([x + w / 2, -(y + h / 2)]);
+        view.setResolution(factor);
+        window.__viewer.level = view.getResolution();
+        return window.__viewer.level;
+      };
+    </script>
+  </body>
+</html>

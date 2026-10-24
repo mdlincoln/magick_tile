@@ -1,6 +1,6 @@
 [project]
 name = "magick_tile"
-version = "0.2.0"
+version = "0.4.0"
 description = "Use Imagemagick to efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0"
 readme = "README.md"
 license = "MIT"
@@ -31,6 +31,19 @@ dev = [
     "ruff>=0.17.2,<0.18",
     "ty>=0.0.91,<0.1",
 ]
+# The browser end-to-end suite in e2e/ needs Playwright; keeping it out of the
+# dev group keeps the default test run unit-only.
+e2e = ["pytest-playwright>=0.10,<0.11"]
+
+[tool.pytest.ini_options]
+# The default run is unit-only; `uv run --group e2e pytest e2e` overrides this
+# with an explicit path.
+testpaths = ["tests"]
+# `e2e` is a source tree, not an installed package, and `tests/` has no
+# __init__.py, so pytest's prepend import mode would put `tests/` — not the
+# repository root — on sys.path and `from e2e.requests import ...` would fail at
+# collection.
+pythonpath = ["."]
 
 [build-system]
 requires = ["hatchling"]
@@ -38,6 +51,22 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["magick_tile"]
+
+# hatchling's built-in ignores leave generated directories alone (an unscoped
+# build ships out/ and htmlcov/), so the harness assets and generated
+# directories are excluded explicitly. The wheel is already package-only.
+# Each pattern is a glob on purpose: a bare directory path such as
+# "/e2e/fixtures" matches nothing and silently ships the directory's contents.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/e2e/fixtures/**",
+    # One vendor directory per viewer backend.
+    "/e2e/viewer/*/vendor/**",
+    "/out/**",
+    "/htmlcov/**",
+    "/dist/**",
+    "/.playwright-mcp/**",
+]
 
 [tool.ruff]
 # 88 keeps the layout the codebase was formatted at under black.
