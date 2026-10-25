@@ -1,6 +1,6 @@
 [project]
 name = "magick_tile"
-version = "0.4.0"
+version = "0.5.0"
 description = "Use Imagemagick to efficiently create derivative tiles of a very large image, and structure them into directories compliant with IIIF Level 0"
 readme = "README.md"
 license = "MIT"
