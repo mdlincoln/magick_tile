@@ -1,0 +1,71 @@
+name: publish
+
+# Publishing runs only when a stable GitHub Release is minted. `published`
+# would also fire for pre-releases; `released` does not.
+on:
+  release:
+    types: [released]
+
+# Least privilege at the top level. The publish job widens this to id-token
+# write; every other job stays read-only.
+permissions:
+  contents: read
+
+jobs:
+  # A release is minted by hand, so re-run the PR suite against the tagged
+  # commit. Calling pytest.yml keeps a single definition of the test matrix.
+  tests:
+    uses: ./.github/workflows/pytest.yml
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: '3.10'
+          enable-cache: true
+      - name: Check release tag matches pyproject version
+        # PyPI rejects re-uploads, so a mismatched tag would burn a version
+        # number on the wrong content. Fail before anything is built.
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(uv version --short)"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::release ${GITHUB_REF_NAME} does not match pyproject version ${pkg}" >&2
+            exit 1
+          fi
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Check distribution metadata
+        run: uvx twine check dist/*
+      - name: Upload distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          # An empty build should fail here, where the build logs are, rather
+          # than surfacing as a confusing failure in the publish job.
+          if-no-files-found: error
+
+  publish:
+    needs: [tests, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/magick-tile
+    permissions:
+      # Mandatory for Trusted Publishing: mints the OIDC token PyPI exchanges
+      # for a short-lived upload token. No API token is stored anywhere.
+      id-token: write
+      contents: read
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

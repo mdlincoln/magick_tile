@@ -1,5 +1,9 @@
 name: pytest
-on: pull_request
+on:
+  pull_request:
+  # Also callable from publish.yml so a release re-runs the suite against the
+  # tagged commit before anything is uploaded to PyPI.
+  workflow_call:
 
 jobs:
   pytest:
@@ -30,6 +34,9 @@ jobs:
         shell: bash -eo pipefail {0}
         run: uv run pytest --junitxml=pytest.xml --cov=magick_tile --cov-report=term-missing:skip-covered | tee pytest-coverage.txt
       - name: Pytest coverage comment
+        # A release-triggered call to this workflow has no pull request to
+        # comment on, so this step is PR-only.
+        if: github.event_name == 'pull_request'
         uses: MishaKav/pytest-coverage-comment@main
         with:
           pytest-coverage-path: ./pytest-coverage.txt
