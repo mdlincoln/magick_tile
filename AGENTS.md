@@ -22,3 +22,10 @@ README links to. `tests/test_meta.py` pins both ends of that split — the READM
 must mention `--version` and link `CHANGELOG.md`, and the changelog must name
 both canonical size-directory forms (`w,h`, `w,`) and both full-size keywords
 (`full/max`, `full/full`).
+
+## GitHub CLI
+
+`gh` resolves this repository's default repo to the archived `cmu-lib/magick_tile`
+parent fork rather than to this one, so commands that rely on that resolution —
+`gh release`, `gh run`, `gh pr` — act on a read-only repository or find nothing.
+Pass `--repo mdlincoln/magick_tile`.
