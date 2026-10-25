@@ -4,6 +4,20 @@ Changes to what `magick_tile` writes: the directory layout of a tree and the
 `info.json` payload. Anything that changes either is recorded here, with what a
 consumer has to do about it.
 
+## 0.5.0
+
+### Breaking changes
+
+- Python 3.11 or newer is required. Consumers still on 3.10 stay on `0.4.0`.
+
+### Notes
+
+- **A tree written by `0.4.0` on Python 3.10 is unchanged**, so an existing tree
+  needs no regeneration. `0.4.0` could not finish on Python 3.11 and newer: the
+  string form of the format enum gained the enum's name, so a tile was written as
+  `512.IIIFFormats.jpg` and the resize step read `512.IIIFFormats` as a tile
+  coordinate. A run that failed part-way has no usable tree; re-run it in full.
+
 ## 0.4.0
 
 ### Breaking changes

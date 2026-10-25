@@ -12,7 +12,7 @@ CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 def test_package_version() -> None:
     project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
-    assert project["version"] == "0.4.0"
+    assert project["version"] == "0.5.0"
 
 
 def test_readme_markers() -> None:
