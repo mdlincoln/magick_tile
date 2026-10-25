@@ -51,7 +51,7 @@ def site_root(tmp_path: Path) -> Path:
         (service / relative).mkdir(parents=True)
         (service / relative / "default.jpg").write_bytes(b"tile")
     info = {"width": 512, "height": 512, "sizes": [{"width": 256, "height": 224}]}
-    (service / "info.json").write_text(json.dumps(info))
+    (service / "info.json").write_text(json.dumps(info), encoding="utf-8")
     return tmp_path
 
 
@@ -139,7 +139,7 @@ def large_site_root(tmp_path: Path) -> Path:
         "height": 4096,
         "sizes": [{"width": 256, "height": 327}],
     }
-    (service / "info.json").write_text(json.dumps(info))
+    (service / "info.json").write_text(json.dumps(info), encoding="utf-8")
     return tmp_path
 
 
@@ -204,7 +204,7 @@ def test_classify_requested_keeps_a_missing_spelling_visible(
     region_dir.mkdir(parents=True)
     (region_dir / "default.jpg").write_bytes(b"tile")
     (service / "info.json").write_text(
-        json.dumps({"width": 3202, "height": 4096, "sizes": []})
+        json.dumps({"width": 3202, "height": 4096, "sizes": []}), encoding="utf-8"
     )
     assert not (service / "full" / "401,512" / "0" / "default.jpg").exists()
 

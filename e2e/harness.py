@@ -13,9 +13,10 @@ from __future__ import annotations
 import http.server
 import shutil
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Self
 
 from magick_tile.generator import SourceImage
 from magick_tile.settings import IIIFVersions
@@ -154,7 +155,7 @@ class StaticSiteServer:
             self._thread = None
         self._httpd.server_close()
 
-    def __enter__(self) -> StaticSiteServer:
+    def __enter__(self) -> Self:
         self.start()
         return self
 

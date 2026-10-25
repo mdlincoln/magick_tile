@@ -7,7 +7,7 @@ driving a browser of its own.
 """
 
 import json
-from typing import Iterator
+from collections.abc import Iterator
 from urllib.parse import urlparse
 
 import pytest
@@ -51,7 +51,9 @@ def site(
     try:
         source = build_site(site_root, server.base_url, version)
         server.start()
-        info = json.loads((site_root / TILE_SOURCE_PATH / "info.json").read_text())
+        info = json.loads(
+            (site_root / TILE_SOURCE_PATH / "info.json").read_text(encoding="utf-8")
+        )
         yield Site(
             version=version,
             base_url=server.base_url,

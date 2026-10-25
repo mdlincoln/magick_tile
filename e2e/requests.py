@@ -9,9 +9,10 @@ group, and the harness can import this module without an import cycle.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Protocol
+from typing import Protocol
 from urllib.parse import unquote, urlparse
 
 from magick_tile.settings import IIIFVersions
@@ -102,7 +103,9 @@ def region_tile_paths(site_root: Path) -> set[str]:
 
 def read_info(site_root: Path) -> dict:
     """The generated image service's info.json payload."""
-    return json.loads((site_root / TILE_SOURCE_PATH / "info.json").read_text())
+    return json.loads(
+        (site_root / TILE_SOURCE_PATH / "info.json").read_text(encoding="utf-8")
+    )
 
 
 def declared_image_urls(
