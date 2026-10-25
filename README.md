@@ -142,15 +142,16 @@ To change a dependency, edit `pyproject.toml` (`dependencies` or a group under
 
 ## Releasing
 
-Bump `version` in `pyproject.toml`, move `CHANGELOG.md`'s `Unreleased` section under the new version, then build and upload:
+Record the release in `CHANGELOG.md` under an `## X.Y.Z` heading, bump `version` in
+`pyproject.toml` to match, and merge to `master`. Then create a GitHub Release with a
+matching `vX.Y.Z` tag.
 
-```
-uv build      # sdist + wheel, written to dist/
-uv publish    # upload to PyPI
-```
-
-`uv publish` takes credentials from `UV_PUBLISH_TOKEN` or `--token`; a PyPI API token
-scoped to this project is the simplest credential to use.
+`.github/workflows/publish.yml` runs on stable releases: it re-runs the test suite
+against the tagged commit, checks that the tag matches `pyproject.toml`, and uploads
+the sdist and wheel to PyPI via Trusted Publishing. That requires a Trusted Publisher
+registered on PyPI for this repository, naming workflow `publish.yml` and environment
+`pypi`; without it the upload step fails. No API token is stored in the repository,
+and pre-releases do not publish.
 
 ---
 [Matthew Lincoln](https://matthewlincoln.net)
