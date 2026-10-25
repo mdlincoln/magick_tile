@@ -26,7 +26,7 @@ jobs:
         # release has to be named; `@v10` fails to resolve at job setup.
         uses: astral-sh/setup-uv@v10.3.2
         with:
-          python-version: '3.10'
+          python-version: '3.15'
           enable-cache: true
       - name: Check release tag matches pyproject version
         # PyPI rejects re-uploads, so a mismatched tag would burn a version

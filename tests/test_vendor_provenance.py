@@ -17,7 +17,7 @@ DIGEST_BLOCK = re.compile(r"<!-- sha256:begin -->(.*?)<!-- sha256:end -->", re.D
 
 def recorded_digests(readme: Path) -> dict[str, str]:
     """The ``path<TAB>sha256`` lines of a vendor README's checksum block."""
-    match = DIGEST_BLOCK.search(readme.read_text())
+    match = DIGEST_BLOCK.search(readme.read_text(encoding="utf-8"))
     assert match, f"{readme.relative_to(REPO_ROOT)} has no sha256 block"
     digests: dict[str, str] = {}
     for line in match.group(1).splitlines():

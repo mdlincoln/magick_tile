@@ -739,7 +739,7 @@ class TestManifestOutput:
         assert not info_file_path.exists()
         example_jpg_image.write_info()
         assert info_file_path.exists()
-        with open(info_file_path, "r") as infof:
+        with open(info_file_path, encoding="utf-8") as infof:
             reread_obj = json.load(infof)
             # HttpUrl is not a str subclass in pydantic v2, so compare the
             # serialized form.

@@ -6,9 +6,10 @@ tiles laid out per the region-grid algorithm."""
 import json
 import math
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterator, NamedTuple
+from typing import NamedTuple
 
 import pytest
 
@@ -74,7 +75,7 @@ def converted_tree(request: pytest.FixtureRequest) -> Iterator[ConvertedTree]:
             version=version,
         )
         source.convert()
-        info = json.loads((Path(out) / "info.json").read_text())
+        info = json.loads((Path(out) / "info.json").read_text(encoding="utf-8"))
         yield ConvertedTree(version=version, info=info, output_dir=Path(out))
 
 

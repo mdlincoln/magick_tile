@@ -4,7 +4,6 @@ https://github.com/zimeon/iiif/blob/master/iiif_static.py
 """
 
 import logging
-from typing import Optional
 import re
 import subprocess
 from math import ceil
@@ -273,9 +272,9 @@ class SourceImage(BaseModel):
     tile_size: int
     target_dir: Path
     formats: list[IIIFFormats] = [IIIFFormats.jpg]
-    max_area: Optional[int] = None
-    max_width: Optional[int] = None
-    max_height: Optional[int] = None
+    max_area: int | None = None
+    max_width: int | None = None
+    max_height: int | None = None
     tiles: list[Tile] = []
     working_dir: Path = Field(default_factory=tempdir_path)
     version: IIIFVersions = IIIFVersions._3_0
@@ -350,7 +349,7 @@ class SourceImage(BaseModel):
         implemented, and silently ignoring the limits would overstate the
         tree's capabilities in info.json.
         """
-        constraints: dict[str, Optional[int]] = {
+        constraints: dict[str, int | None] = {
             "max_width": self.max_width,
             "max_height": self.max_height,
             "max_area": self.max_area,
@@ -386,7 +385,8 @@ class SourceImage(BaseModel):
                 "%[fx:page.x],%[fx:page.y],%[fx:w],%[fx:h]",
                 "+repage",
                 "+adjoin",
-                self.working_dir / f"{cropsize},{sf},%[filename:tile].{img_format}",
+                self.working_dir
+                / f"{cropsize},{sf},%[filename:tile].{img_format.value}",
             ]
             subprocess.run(cmd, capture_output=True, check=True)
 
@@ -395,7 +395,9 @@ class SourceImage(BaseModel):
             # necessary info for the final step of the conversion. The glob is
             # scoped to this crop size: an unscoped match would pick up every
             # earlier level's tiles too and resize them again.
-            generated_paths = self.working_dir.glob(f"{cropsize},{sf},*.{img_format}")
+            generated_paths = self.working_dir.glob(
+                f"{cropsize},{sf},*.{img_format.value}"
+            )
             for gp in generated_paths:
                 self.tiles.append(Tile(original_path=gp, source_image=self))
 

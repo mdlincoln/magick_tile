@@ -32,7 +32,7 @@ def test_app_2_1(test_jpg: Path, test_output_dir: Path, example_id: str):
     )
     print(result.stdout)
     assert result.exit_code == 0
-    info = json.loads((test_output_dir / "info.json").read_text())
+    info = json.loads((test_output_dir / "info.json").read_text(encoding="utf-8"))
     assert info["@id"] == example_id
     assert info["profile"] == "http://iiif.io/api/image/2/level0.json"
     assert (test_output_dir / "full" / "full" / "0" / "default.jpg").exists()

@@ -1,4 +1,4 @@
-from typing import Final, Literal, Optional
+from typing import Final, Literal
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
@@ -23,23 +23,27 @@ class IIIFManifest(BaseModel):
     protocol: str = "http://iiif.io/api/image"
     width: int
     height: int
-    sizes: Optional[list[TileSize]] = None
-    tiles: Optional[list[TileScale]] = None
+    sizes: list[TileSize] | None = None
+    tiles: list[TileScale] | None = None
     # preferredFormats is an Image API 3.0 property (§5.5); 2.1 payloads must
     # not carry it. The 3.0 construction always passes it explicitly, so the
     # None default only ensures 2.1 serialization drops the key entirely
     # under exclude_none=True.
-    preferredFormats: Optional[list[IIIFFormats]] = None
-    maxWidth: Optional[int] = None
-    maxHeight: Optional[int] = None
-    maxArea: Optional[int] = None
-    rights: Optional[str] = None
+    preferredFormats: list[IIIFFormats] | None = None
+    maxWidth: int | None = None
+    maxHeight: int | None = None
+    maxArea: int | None = None
+    rights: str | None = None
 
     def write_info_file(self, output_dir: Path) -> None:
         """Write json serialization to info.json at the specified output directory."""
         output_file = output_dir / "info.json"
+        # Explicit utf-8 so the bytes of info.json do not depend on the
+        # interpreter's locale: 3.15 makes UTF-8 the default (PEP 686), and
+        # this file lands in every generated tree.
         output_file.write_text(
-            self.model_dump_json(by_alias=True, exclude_none=True, indent=2)
+            self.model_dump_json(by_alias=True, exclude_none=True, indent=2),
+            encoding="utf-8",
         )
 
 
@@ -72,4 +76,4 @@ class IIIFManifest_3_0(IIIFManifest):
     )
     type: Literal["ImageService3"] = "ImageService3"
     profile: str = "level0"
-    extraFormats: Optional[list[IIIFFormats]] = None
+    extraFormats: list[IIIFFormats] | None = None

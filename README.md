@@ -9,7 +9,7 @@ This takes inspiration heavily from https://github.com/zimeon/iiif/blob/master/i
 
 ## Prerequisites
 
-- Python > 3.9
+- Python 3.11 or newer
 - [Imagemagick](https://imagemagick.org/index.php) must be available on your path
 
 ## Installation
